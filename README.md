@@ -2,6 +2,10 @@
 
 Interactive 3D aircraft explorer for type-rating students. v1 covers the exterior of the Boeing 737-800 (NG).
 
+**Live:** https://aircrafty.siklevis7.workers.dev (Cloudflare) · mirror: https://siklevis7.github.io/aircrafty/
+
+Every push to `main` deploys to both automatically.
+
 ## Run it
 
 ```bash
