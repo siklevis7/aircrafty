@@ -7,6 +7,7 @@ import { createPanel } from './ui/panel.js';
 import { createDock } from './ui/dock.js';
 import { createWalkaround } from './ui/walkaround.js';
 import { createSchematicView } from './ui/schematic.js';
+import { createQuiz } from './ui/quiz.js';
 import { toast } from './ui/toast.js';
 
 const $ = (s) => document.querySelector(s);
@@ -29,7 +30,7 @@ $('#theme-toggle').addEventListener('click', () => {
 });
 systemDark.addEventListener('change', applySceneTheme);
 
-const MODE_HASH = { explore: '', walkaround: '#walkaround', flightdeck: '#flightdeck', systems: '#systems' };
+const MODE_HASH = { explore: '', walkaround: '#walkaround', flightdeck: '#flightdeck', systems: '#systems', quiz: '#quiz' };
 const modeFromHash = () => Object.keys(MODE_HASH).find((m) => MODE_HASH[m] && MODE_HASH[m] === location.hash) || 'explore';
 
 // ---------------------------------------------------------------- boot
@@ -83,6 +84,8 @@ async function boot() {
   let panel = null;
 
   function select3d(id, opts = {}) {
+    // During a "find it" quiz question, a click on the model is the answer.
+    if (id && mode === 'quiz' && quiz?.wantsPick) { quiz.pick(id); return; }
     selected = id;
     viewer.select(id, opts);
     index?.setSelected(id);
@@ -166,6 +169,14 @@ async function boot() {
     })
     : null;
   viewer.addTicker((dt) => { systems.update(dt); deck?.update(dt); dock.tick(); schem?.tick(); });
+  const quiz = ac.quiz
+    ? createQuiz($('#quiz'), {
+      bank: ac.quiz, aircraftId: ac.meta.id, viewer,
+      sources: { exterior: ac.parts, flightdeck: ac.flightDeck?.parts },
+      setScene: (key) => { if (ds.key !== key && datasets[key]) useDataset(key); },
+      setHotspots: (on) => viewer.setHotspots(on),
+    })
+    : null;
   if (import.meta.env.DEV) window.__aircrafty = { viewer, systems, select: (id) => select3d(id), datasets };
 
   // ---------------------------------------------------------------- modes
@@ -176,6 +187,7 @@ async function boot() {
   if (!walk) document.querySelector('.mode[data-mode="walkaround"]')?.setAttribute('disabled', '');
   if (!deck) document.querySelector('.mode[data-mode="flightdeck"]')?.setAttribute('disabled', '');
   if (!schem) document.querySelector('.mode[data-mode="systems"]')?.setAttribute('disabled', '');
+  if (!quiz) document.querySelector('.mode[data-mode="quiz"]')?.setAttribute('disabled', '');
 
   function parkForWalkaround() {
     // A walkaround happens on the ground with the aircraft parked and configured normally.
@@ -194,10 +206,11 @@ async function boot() {
     walkaround: 'Follow the numbered route · ← → to move between stops',
     flightdeck: 'Click any panel · drag to look around · scroll to lean in',
     systems: '',
+    quiz: 'Answer in the left panel · for "find it" questions, click the 3D model',
   };
 
   function setMode(next, { initial = false } = {}) {
-    if ((next === 'walkaround' && !walk) || (next === 'flightdeck' && !deck) || (next === 'systems' && !schem)) next = 'explore';
+    if ((next === 'walkaround' && !walk) || (next === 'flightdeck' && !deck) || (next === 'systems' && !schem) || (next === 'quiz' && !quiz)) next = 'explore';
     if (next === mode && !initial) return;
     const prev = mode;
     mode = next;
@@ -209,6 +222,7 @@ async function boot() {
     });
     select3d(null);
     if (prev === 'walkaround') walk?.stop();
+    if (prev === 'quiz') { quiz?.stop(); viewer.setHotspots(store.get('hotspots', true)); }
     const dockEl = $('#dock');
     $('.stage-hint').textContent = HINTS[mode];
 
@@ -221,6 +235,12 @@ async function boot() {
     } else if (mode === 'flightdeck') {
       useDataset('flightdeck');
       dockEl.classList.add('is-collapsed');
+    } else if (mode === 'quiz') {
+      useDataset(ds?.key === 'flightdeck' ? 'flightdeck' : 'exterior', { fly: false });
+      $('#ac-family').textContent = 'Quiz';
+      dockEl.classList.add('is-collapsed');
+      quiz.start();
+      if (window.innerWidth <= 820) document.body.classList.remove('sidebar-collapsed');
     } else {
       useDataset('exterior', { fly: mode === 'explore' && !initial });
       if (mode === 'walkaround') {
@@ -276,6 +296,7 @@ async function boot() {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
     const viewNames = Object.keys(ds.camera.views);
+    if (mode === 'quiz' && quiz.key(k)) { e.preventDefault(); return; }
     if (k === 'Escape') { if (!help.hidden) { help.hidden = true; return; } select3d(null); }
     else if (mode === 'walkaround' && (k === 'ArrowRight' || k === 'ArrowLeft')) { e.preventDefault(); k === 'ArrowRight' ? walk.next() : walk.prev(); }
     else if (k === 'h' || k === 'H') setHot(hotBtn.getAttribute('aria-pressed') !== 'true');
