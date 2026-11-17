@@ -301,6 +301,9 @@ export class Viewer {
   // ------------------------------------------------------------------ internals
   setFov(deg) { this.camera.fov = deg; this.camera.updateProjectionMatrix(); }
 
+  /** Stop rendering (tickers keep running) while another view covers the 3D scene. */
+  setPaused(p) { this.paused = p; }
+
   /** Scale the global lights (1 = normal daylight). Used for night scenes. */
   setLightScale(k) {
     this.hemi.intensity = 0.55 * k;
@@ -505,6 +508,7 @@ export class Viewer {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const now = this.clock.elapsedTime;
     for (const t of this.tickers) t(dt, now);
+    if (this.paused) return;
     this._stepInsets(dt);
 
     if (this._pendingHover) {

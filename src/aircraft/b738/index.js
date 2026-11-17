@@ -6,6 +6,7 @@ import { parts, categories, meta } from './parts.js';
 import { walkaround } from './walkaround.js';
 import { fdParts, fdCategories } from './flightdeck-parts.js';
 import { buildFlightDeck } from './flightdeck.js';
+import { schematics, schematicParts, schematicCategories, schematicScenario } from './schematics.js';
 
 export default {
   meta,
@@ -13,6 +14,7 @@ export default {
   categories,
   controlPanel,
   walkaround,
+  schematics: { systems: schematics, parts: schematicParts, categories: schematicCategories, scenario: schematicScenario },
   flightDeck: {
     parts: fdParts,
     categories: fdCategories,

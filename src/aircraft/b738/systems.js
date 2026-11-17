@@ -80,6 +80,16 @@ export function createSystems(rig) {
     reversers: false, apu: false, doors: false,
     'light.nav': true, 'light.strobe': false, 'light.beacon': false, 'light.landing': false,
     'light.turnoff': false, 'light.taxi': false, 'light.logo': false, 'light.wing': false,
+    // ---- aircraft systems panel state (shared by the flight deck and the schematics)
+    engines: false, // both engines running (simplified: engine start isn't simulated step by step)
+    'sw.fuel.aft1': true, 'sw.fuel.fwd1': true, 'sw.fuel.ctrl': false, 'sw.fuel.ctrr': false,
+    'sw.fuel.fwd2': true, 'sw.fuel.aft2': true, 'sw.fuel.xfeed': false,
+    'sw.hyd.elec2': true, 'sw.hyd.eng1': true, 'sw.hyd.eng2': true, 'sw.hyd.elec1': true,
+    'sw.fc.a': true, 'sw.fc.b': true, 'sw.altflaps': false,
+    'sw.battery': true, 'sw.stbypower': true, 'sw.bustransfer': true,
+    'elec.bus1': 'ext', 'elec.bus2': 'ext', // source selected for each AC transfer bus
+    'sw.bleed1': true, 'sw.bleed2': true, 'sw.apubleed': false, 'sw.iso': 'AUTO',
+    'sw.pack.l': true, 'sw.pack.r': true, 'sw.wingai': false,
   };
   // animated values
   const cur = {
@@ -108,6 +118,7 @@ export function createSystems(rig) {
           if (state.reversers) return deny('Stow the thrust reversers before takeoff.');
           if (state.doors) return deny('Close all doors before takeoff.');
           state.onGround = false;
+          state.engines = true; // flying implies both engines running
           if (state.speedbrake === 'UP') state.speedbrake = 'DOWN';
         }
         break;
@@ -140,12 +151,154 @@ export function createSystems(rig) {
       case 'stabTrim':
         state.stabTrim = clamp(Number(value), 0, 17);
         break;
+      case 'engines':
+        if (!value && !state.onGround) return deny('Both engines can\'t be shut down here in flight. Land first.');
+        state.engines = !!value;
+        break;
+      case 'sw.iso':
+        state['sw.iso'] = ['AUTO', 'OPEN', 'CLOSE'].includes(value) ? value : 'AUTO';
+        break;
+      case 'act.elec.gen1': case 'act.elec.gen2': case 'act.elec.apu': case 'act.elec.ext': {
+        const src = key.slice(9);
+        const avail = sources();
+        if (src === 'ext') {
+          if (!avail.ext) return deny('No ground power: external power is only connected on the ground.');
+          const both = state['elec.bus1'] === 'ext' && state['elec.bus2'] === 'ext';
+          state['elec.bus1'] = both ? '' : 'ext';
+          state['elec.bus2'] = both ? '' : 'ext';
+          break;
+        }
+        if (!avail[src]) return deny(src === 'apu' ? 'The APU isn\'t running yet. Start it and wait for APU GEN OFF BUS (blue).' : `Generator ${src.slice(3)} needs its engine running.`);
+        if (src === 'gen1') state['elec.bus1'] = 'gen1';
+        else if (src === 'gen2') state['elec.bus2'] = 'gen2';
+        else { state['elec.bus1'] = 'apu'; state['elec.bus2'] = 'apu'; }
+        break;
+      }
       default:
         if (key in state) state[key] = value;
         else return deny(`Unknown control ${key}`);
     }
     emit({ type: 'state' });
     return { ok: true };
+  }
+
+  // ------------------------------------------------------------------ systems logic
+  // Simplified, rule-based models for study. They follow the real architecture
+  // (who powers what) without simulating pressures, voltages or quantities.
+  function sources() {
+    return { gen1: state.engines, gen2: state.engines, apu: cur.apuSpool >= 0.999, ext: state.onGround };
+  }
+
+  function electrical() {
+    const avail = sources();
+    const ok = (src) => !!src && !!avail[src];
+    let b1 = ok(state['elec.bus1']) ? state['elec.bus1'] : '';
+    let b2 = ok(state['elec.bus2']) ? state['elec.bus2'] : '';
+    // Automatic bus transfer: if one generator side is lost, the other generator powers both buses.
+    const isGen = (s) => s === 'gen1' || s === 'gen2';
+    if (state['sw.bustransfer']) {
+      if (!b1 && isGen(b2)) b1 = b2;
+      if (!b2 && isGen(b1)) b2 = b1;
+    }
+    const bat = state['sw.battery'];
+    const tru1 = !!b1, tru2 = !!b2, tru3 = !!b2 || !!b1;
+    return {
+      avail, bus1: b1, bus2: b2, tbus1: !!b1, tbus2: !!b2,
+      dc1: tru1 || tru3, dc2: tru2 || tru3, tru1, tru2, tru3,
+      acStby: !!b1 || (bat && state['sw.stbypower']), inverter: !b1 && bat && state['sw.stbypower'],
+      batBus: tru3 || bat, hotBat: true, batteryDischarging: bat && !tru3,
+      galley1: !!b1, galley2: !!b2,
+    };
+  }
+
+  function hydraulics(e) {
+    const run = state.engines;
+    const p = {
+      eng1: state['sw.hyd.eng1'] && run, elec2: state['sw.hyd.elec2'] && e.tbus2,
+      eng2: state['sw.hyd.eng2'] && run, elec1: state['sw.hyd.elec1'] && e.tbus1,
+    };
+    const A = p.eng1 || p.elec2;
+    const B = p.eng2 || p.elec1;
+    const stbyManual = state['sw.altflaps'] || !state['sw.fc.a'] || !state['sw.fc.b'];
+    const stbyAuto = (!A || !B) && state.flapLever > 0 && !state.onGround;
+    const stby = (stbyManual || stbyAuto) && e.tbus1;
+    // PTU: system A pressure drives a pump for system B's leading-edge devices when B's engine pump is lost.
+    const ptu = A && !state.onGround && !p.eng2 && state.flapLever > 0 && state.flapLever < 15;
+    return {
+      pumps: p, A, B, stby, stbyAuto, ptu,
+      fcA: A && state['sw.fc.a'], fcB: B && state['sw.fc.b'],
+      users: {
+        fcA: A && state['sw.fc.a'], spoilersA: A, groundSpoilers: A, gear: A, nws: A, altBrakes: A, rev1: A || stby, apA: A,
+        fcB: B && state['sw.fc.b'], spoilersB: B, teFlaps: B, leDevices: B || ptu || stby, brakes: B, rev2: B || stby, apB: B, yawDamper: B,
+        stbyRudder: stby,
+      },
+    };
+  }
+
+  function fuel(e) {
+    const pump = (k, bus) => state[`sw.fuel.${k}`] && bus;
+    const p = {
+      aft1: pump('aft1', e.tbus1), fwd1: pump('fwd1', e.tbus1), ctrl: pump('ctrl', e.tbus1),
+      ctrr: pump('ctrr', e.tbus2), fwd2: pump('fwd2', e.tbus2), aft2: pump('aft2', e.tbus2),
+    };
+    const xfeed = state['sw.fuel.xfeed'];
+    // Center tank pumps produce higher pressure, so center fuel is used first when they run.
+    let leftSrc = p.ctrl ? 'ctr' : p.aft1 || p.fwd1 ? 'main1' : '';
+    let rightSrc = p.ctrr ? 'ctr' : p.aft2 || p.fwd2 ? 'main2' : '';
+    const leftPress = !!leftSrc || (xfeed && !!rightSrc);
+    const rightPress = !!rightSrc || (xfeed && !!leftSrc);
+    if (!leftSrc && xfeed && rightSrc) leftSrc = 'xfeed';
+    if (!rightSrc && xfeed && leftSrc && leftSrc !== 'xfeed') rightSrc = 'xfeed';
+    const run = state.engines;
+    return {
+      pumps: p, xfeed, leftPress, rightPress, leftSrc, rightSrc,
+      eng1Feed: run, eng2Feed: run, // engines suction-feed from their main tanks if no pump pressure
+      eng1Suction: run && !leftPress, eng2Suction: run && !rightPress,
+      apuFeed: state.apu,
+    };
+  }
+
+  function bleed() {
+    const run = state.engines;
+    const apuReady = cur.apuSpool >= 0.999;
+    const eb1 = state['sw.bleed1'] && run, eb2 = state['sw.bleed2'] && run;
+    const apub = state['sw.apubleed'] && apuReady;
+    const iso = state['sw.iso'];
+    const isoOpen = iso === 'OPEN' || (iso === 'AUTO' && !(state['sw.bleed1'] && state['sw.bleed2'] && state['sw.pack.l'] && state['sw.pack.r']));
+    const leftSrc = eb1 || apub, rightSrc = eb2;
+    const left = leftSrc || (isoOpen && rightSrc);
+    const right = rightSrc || (isoOpen && leftSrc);
+    return {
+      eb1, eb2, apub, isoOpen, left, right,
+      packL: state['sw.pack.l'] && left, packR: state['sw.pack.r'] && right,
+      wingAI: state['sw.wingai'] && (left || right),
+      // DUAL BLEED follows switch positions: APU bleed valve open with engine 1 bleed ON, or engine 2 bleed ON and isolation open
+      dualBleed: apub && (state['sw.bleed1'] || (state['sw.bleed2'] && isoOpen)),
+      starter: left || right,
+    };
+  }
+
+  function panel() {
+    const e = electrical();
+    const h = hydraulics(e);
+    const f = fuel(e);
+    const b = bleed();
+    const ann = {
+      'fuel.aft1': !f.pumps.aft1, 'fuel.fwd1': !f.pumps.fwd1, 'fuel.fwd2': !f.pumps.fwd2, 'fuel.aft2': !f.pumps.aft2,
+      // center pump lights only show with the switch ON and no pump pressure
+      'fuel.ctrl': state['sw.fuel.ctrl'] && !f.pumps.ctrl, 'fuel.ctrr': state['sw.fuel.ctrr'] && !f.pumps.ctrr,
+      'hyd.elec2': !h.pumps.elec2, 'hyd.eng1': !h.pumps.eng1, 'hyd.eng2': !h.pumps.eng2, 'hyd.elec1': !h.pumps.elec1,
+      'fc.a': !h.fcA, 'fc.b': !h.fcB,
+      'elec.tbo1': !e.tbus1, 'elec.tbo2': !e.tbus2,
+      'bleed.dual': b.dualBleed, 'ai.wing': b.wingAI,
+      'fuel.xfeed': f.xfeed,
+    };
+    const cats = new Set();
+    if (['fuel.aft1', 'fuel.fwd1', 'fuel.fwd2', 'fuel.aft2', 'fuel.ctrl', 'fuel.ctrr'].some((k) => ann[k])) cats.add('FUEL');
+    if (['hyd.elec2', 'hyd.elec1', 'hyd.eng1', 'hyd.eng2'].some((k) => ann[k])) cats.add('HYD');
+    if (ann['fc.a'] || ann['fc.b']) cats.add('FLT CONT');
+    if (ann['elec.tbo1'] || ann['elec.tbo2']) cats.add('ELEC');
+    return { elec: e, hyd: h, fuel: f, bleed: b, ann, cats };
   }
 
   /** Apply several settings in order (used by "Try it" buttons). */
@@ -314,6 +467,7 @@ export function createSystems(rig) {
     update,
     annunciators,
     readout,
+    panel,
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
   };
 }

@@ -6,6 +6,7 @@ import { createIndex } from './ui/partsIndex.js';
 import { createPanel } from './ui/panel.js';
 import { createDock } from './ui/dock.js';
 import { createWalkaround } from './ui/walkaround.js';
+import { createSchematicView } from './ui/schematic.js';
 import { toast } from './ui/toast.js';
 
 const $ = (s) => document.querySelector(s);
@@ -28,8 +29,8 @@ $('#theme-toggle').addEventListener('click', () => {
 });
 systemDark.addEventListener('change', applySceneTheme);
 
-const MODE_HASH = { explore: '', walkaround: '#walkaround', flightdeck: '#flightdeck' };
-const modeFromHash = () => (location.hash === '#walkaround' ? 'walkaround' : location.hash === '#flightdeck' ? 'flightdeck' : 'explore');
+const MODE_HASH = { explore: '', walkaround: '#walkaround', flightdeck: '#flightdeck', systems: '#systems' };
+const modeFromHash = () => Object.keys(MODE_HASH).find((m) => MODE_HASH[m] && MODE_HASH[m] === location.hash) || 'explore';
 
 // ---------------------------------------------------------------- boot
 async function boot() {
@@ -68,6 +69,13 @@ async function boot() {
     };
   }
 
+  if (ac.schematics) {
+    datasets.systems = {
+      key: 'systems', root: null, parts: ac.schematics.parts, categories: ac.schematics.categories,
+      camera: ac.camera, progress: createProgress(`${ac.meta.id}-systems`), family: 'Systems',
+    };
+  }
+
   let ds = null;
   let selected = null;
   let mode = 'explore';
@@ -82,6 +90,7 @@ async function boot() {
       panel.show(id);
       if (ds.progress.add(id)) { index.refresh(); updateProgress(); }
     } else panel?.hide();
+    if (ds?.key === 'systems') schem?.highlight(id);
     document.body.classList.toggle('has-selection', !!id);
     updateInsets();
   }
@@ -118,7 +127,8 @@ async function boot() {
     if (ds?.key === key) return;
     select3d(null);
     ds = datasets[key];
-    viewer.load(ds.root, ds.parts, ds.camera);
+    if (ds.root) viewer.load(ds.root, ds.parts, ds.camera);
+    viewer.setPaused(!ds.root);
     index = createIndex($('#index'), {
       categories: ds.categories, parts: ds.parts, progress: ds.progress,
       onSelect: (id) => select3d(id),
@@ -134,7 +144,7 @@ async function boot() {
     $('#ac-family').textContent = ds.family;
     updateProgress();
     renderViews();
-    if (fly) {
+    if (fly && ds.root) {
       const V = viewer.camera.position.constructor;
       if (key === 'flightdeck') {
         viewer.camera.position.set(...ds.camera.home.position);
@@ -149,7 +159,13 @@ async function boot() {
   const dock = createDock($('#dock'), { schema: ac.controlPanel, systems });
   $('#dock .dock-handle').addEventListener('click', () => setTimeout(updateInsets, 380));
   updateInsets();
-  viewer.addTicker((dt) => { systems.update(dt); deck?.update(dt); dock.tick(); });
+  const schem = ac.schematics
+    ? createSchematicView($('#schem'), {
+      schematics: ac.schematics.systems, scenario: ac.schematics.scenario, systems,
+      onSelect: (id) => select3d(id), onWarn: (m) => toast(m, 'warn'),
+    })
+    : null;
+  viewer.addTicker((dt) => { systems.update(dt); deck?.update(dt); dock.tick(); schem?.tick(); });
   if (import.meta.env.DEV) window.__aircrafty = { viewer, systems, select: (id) => select3d(id), datasets };
 
   // ---------------------------------------------------------------- modes
@@ -159,6 +175,7 @@ async function boot() {
   const modeButtons = document.querySelectorAll('.mode[data-mode]');
   if (!walk) document.querySelector('.mode[data-mode="walkaround"]')?.setAttribute('disabled', '');
   if (!deck) document.querySelector('.mode[data-mode="flightdeck"]')?.setAttribute('disabled', '');
+  if (!schem) document.querySelector('.mode[data-mode="systems"]')?.setAttribute('disabled', '');
 
   function parkForWalkaround() {
     // A walkaround happens on the ground with the aircraft parked and configured normally.
@@ -176,10 +193,11 @@ async function boot() {
     explore: 'Click any part · drag to orbit · scroll to zoom',
     walkaround: 'Follow the numbered route · ← → to move between stops',
     flightdeck: 'Click any panel · drag to look around · scroll to lean in',
+    systems: '',
   };
 
   function setMode(next, { initial = false } = {}) {
-    if ((next === 'walkaround' && !walk) || (next === 'flightdeck' && !deck)) next = 'explore';
+    if ((next === 'walkaround' && !walk) || (next === 'flightdeck' && !deck) || (next === 'systems' && !schem)) next = 'explore';
     if (next === mode && !initial) return;
     const prev = mode;
     mode = next;
@@ -195,7 +213,12 @@ async function boot() {
     $('.stage-hint').textContent = HINTS[mode];
 
     viewer.setLightScale(mode === 'flightdeck' && night ? 0.1 : 1);
-    if (mode === 'flightdeck') {
+    $('#schem').hidden = mode !== 'systems';
+    if (mode === 'systems') {
+      useDataset('systems');
+      dockEl.classList.add('is-collapsed');
+      schem.tick();
+    } else if (mode === 'flightdeck') {
       useDataset('flightdeck');
       dockEl.classList.add('is-collapsed');
     } else {

@@ -16,17 +16,17 @@ const GA = (label, extra = {}) => ({ t: 'gauge', label, ...extra });
 const B = (text, extra = {}) => ({ t: 'button', text, ...extra });
 
 const LAYOUTS = {
-  'fd-flight-controls': { title: 'FLIGHT CONTROL', rows: [[G('FLT CONTROL A', { key: 'sw.fc.a' }), G('FLT CONTROL B', { key: 'sw.fc.b' })], [A('LOW PRESS', 'amber', { key: 'ann.fc.a' }), A('LOW PRESS', 'amber', { key: 'ann.fc.b' })], [G('SPOILER A', { on: true }), G('SPOILER B', { on: true })], [G('ALTN FLAPS'), T('UP / DN')], [T('YAW DAMPER', { on: true }), A('YAW DAMPER')]] },
+  'fd-flight-controls': { title: 'FLIGHT CONTROL', rows: [[G('FLT CONTROL A', { key: 'sw.fc.a' }), G('FLT CONTROL B', { key: 'sw.fc.b' })], [A('LOW PRESS', 'amber', { key: 'ann.fc.a' }), A('LOW PRESS', 'amber', { key: 'ann.fc.b' })], [G('SPOILER A', { on: true }), G('SPOILER B', { on: true })], [G('ALTN FLAPS', { key: 'sw.altflaps' }), T('UP / DN')], [T('YAW DAMPER', { on: true }), A('YAW DAMPER')]] },
   'fd-nav-displays': { title: 'NAVIGATION / DISPLAYS', rows: [[K('VHF NAV'), K('IRS'), K('FMC'), K('DISPLAYS'), K('CONTROL')]] },
-  'fd-fuel': { title: 'FUEL', rows: [[GA('FUEL TEMP'), A('VALVE\nOPEN', 'blue'), K('CROSSFEED'), A('VALVE\nOPEN', 'blue')], [T('AFT 1', { key: 'sw.fuel.aft1' }), T('FWD 1', { key: 'sw.fuel.fwd1' }), T('CTR L', { key: 'sw.fuel.ctrl' }), T('CTR R', { key: 'sw.fuel.ctrr' }), T('FWD 2', { key: 'sw.fuel.fwd2' }), T('AFT 2', { key: 'sw.fuel.aft2' })], [A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrl' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrr' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd2' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft2' })]] },
-  'fd-electrical': { title: 'ELECTRICAL', rows: [[GA('DC'), GA('AC')], [K('DC SEL'), G('BAT', { on: true }), K('AC SEL')], [A('TRANSFER\nBUS OFF'), A('SOURCE\nOFF'), A('TRANSFER\nBUS OFF')], [G('STANDBY\nPOWER', { on: true }), T('GRD PWR'), T('BUS XFR', { on: true })], [T('GEN 1'), T('APU GEN'), T('GEN 2')]] },
+  'fd-fuel': { title: 'FUEL', rows: [[GA('FUEL TEMP'), A('VALVE\nOPEN', 'blue'), K('CROSSFEED', { key: 'sw.fuel.xfeed' }), A('VALVE\nOPEN', 'blue', { key: 'ann.fuel.xfeed' })], [T('AFT 1', { key: 'sw.fuel.aft1' }), T('FWD 1', { key: 'sw.fuel.fwd1' }), T('CTR L', { key: 'sw.fuel.ctrl' }), T('CTR R', { key: 'sw.fuel.ctrr' }), T('FWD 2', { key: 'sw.fuel.fwd2' }), T('AFT 2', { key: 'sw.fuel.aft2' })], [A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrl' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrr' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd2' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft2' })]] },
+  'fd-electrical': { title: 'ELECTRICAL', rows: [[GA('DC'), GA('AC')], [K('DC SEL'), G('BAT', { key: 'sw.battery' }), K('AC SEL')], [A('TRANSFER\nBUS OFF', 'amber', { key: 'ann.elec.tbo1' }), A('SOURCE\nOFF'), A('TRANSFER\nBUS OFF', 'amber', { key: 'ann.elec.tbo2' })], [G('STANDBY\nPOWER', { key: 'sw.stbypower' }), T('GRD PWR', { key: 'act.elec.ext' }), T('BUS XFR', { key: 'sw.bustransfer' })], [T('GEN 1', { key: 'act.elec.gen1' }), T('APU GEN', { key: 'act.elec.apu' }), T('GEN 2', { key: 'act.elec.gen2' })]] },
   'fd-apu': { title: 'APU', rows: [[GA('APU EGT'), A('MAINT', 'blue'), A('LOW OIL\nPRESS')], [A('FAULT'), A('OVER\nSPEED'), K('APU', { key: 'apu' })], [A('APU GEN\nOFF BUS', 'blue', { key: 'apuGen' })]] },
   'fd-cabin-signs': { title: 'CABIN / EQUIP', rows: [[T('EQUIP COOL\nSUPPLY'), T('EQUIP COOL\nEXHAUST')], [G('EMER EXIT\nLIGHTS', { on: true }), A('NOT\nARMED')], [T('NO SMOKING', { on: true }), T('FASTEN BELTS', { on: true })], [B('ATTEND'), B('GRD CALL')]] },
   'fd-window-probe-heat': { title: 'WINDOW / PROBE HEAT', rows: [[A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true })], [T('L SIDE', { on: true }), T('L FWD', { on: true }), T('R FWD', { on: true }), T('R SIDE', { on: true })], [T('PROBE A'), T('TEST'), T('PROBE B')], [A('CAPT\nPITOT'), A('L ELEV\nPITOT'), A('F/O\nPITOT'), A('TEMP\nPROBE')]] },
-  'fd-anti-ice': { title: 'ANTI-ICE', rows: [[A('WING\nANTI-ICE', 'blue'), A('COWL\nANTI-ICE'), A('COWL\nANTI-ICE')], [T('WING'), T('ENG 1'), T('ENG 2')]] },
+  'fd-anti-ice': { title: 'ANTI-ICE', rows: [[A('WING\nANTI-ICE', 'blue', { key: 'ann.ai.wing' }), A('COWL\nANTI-ICE'), A('COWL\nANTI-ICE')], [T('WING', { key: 'sw.wingai' }), T('ENG 1'), T('ENG 2')]] },
   'fd-hydraulics': { title: 'HYDRAULIC PUMPS', rows: [[A('OVER\nHEAT'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('OVER\nHEAT')], [T('ELEC 2', { key: 'sw.hyd.elec2' }), T('ENG 1', { key: 'sw.hyd.eng1' }), T('ENG 2', { key: 'sw.hyd.eng2' }), T('ELEC 1', { key: 'sw.hyd.elec1' })], [A('LOW\nPRESS', 'amber', { key: 'ann.hyd.elec2' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.eng1' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.eng2' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.elec1' })]] },
   'fd-air-conditioning': { title: 'AIR CONDITIONING', rows: [[GA('TEMP'), K('TEMP SEL')], [K('CONT CAB'), K('FWD CAB'), K('AFT CAB')], [T('L RECIRC', { on: true }), T('R RECIRC', { on: true })]] },
-  'fd-bleed-air': { title: 'BLEED AIR', rows: [[GA('DUCT PRESS'), A('DUAL\nBLEED')], [A('PACK'), A('WING-BODY\nOVHT'), A('BLEED\nTRIP OFF')], [T('L PACK', { on: true }), K('ISOLATION'), T('R PACK', { on: true })], [T('BLEED 1', { on: true }), T('APU BLEED'), T('BLEED 2', { on: true })]] },
+  'fd-bleed-air': { title: 'BLEED AIR', rows: [[GA('DUCT PRESS'), A('DUAL\nBLEED', 'amber', { key: 'ann.bleed.dual' })], [A('PACK'), A('WING-BODY\nOVHT'), A('BLEED\nTRIP OFF')], [T('L PACK', { key: 'sw.pack.l' }), K('ISOLATION', { key: 'sw.iso' }), T('R PACK', { key: 'sw.pack.r' })], [T('BLEED 1', { key: 'sw.bleed1' }), T('APU BLEED', { key: 'sw.apubleed' }), T('BLEED 2', { key: 'sw.bleed2' })]] },
   'fd-pressurization': { title: 'PRESSURIZATION', rows: [[{ t: 'screen', text: '35000', label: 'FLT ALT' }, { t: 'screen', text: '00000', label: 'LAND ALT' }], [GA('VALVE'), K('MODE'), T('MAN')]] },
   'fd-exterior-lights': { title: '', rows: [[T('L LANDING', { key: 'light.landing' }), T('R LANDING', { key: 'light.landing' }), T('L TURNOFF', { key: 'light.turnoff' }), T('R TURNOFF', { key: 'light.turnoff' }), T('TAXI', { key: 'light.taxi' })]] },
   'fd-exterior-lights-2': { title: '', rows: [[T('LOGO', { key: 'light.logo' }), T('POSITION', { key: 'light.nav' }), T('STROBE', { key: 'light.strobe' }), T('ANTI COLL', { key: 'light.beacon' }), T('WING', { key: 'light.wing' })]] },
@@ -422,7 +422,7 @@ export function buildFlightDeck(systems) {
         const c = hit(uv);
         if (!c) return null;
         const k = c.it.key || '';
-        const note = k.startsWith('light.') || k === 'apu' ? ' (linked to aircraft)' : k.startsWith('sw.') ? ' (live logic)' : '';
+        const note = k.startsWith('light.') || k === 'apu' ? ' (linked to aircraft)' : k.startsWith('sw.') || k.startsWith('act.') ? ' (live systems)' : '';
         return `${name(c)} · click to ${c.it.t === 'button' ? 'press' : c.it.t === 'knob' ? 'turn' : 'switch'}${note}`;
       };
       m.userData.interact = ({ uv }) => {
@@ -439,9 +439,16 @@ export function buildFlightDeck(systems) {
           return { handled: true, ok: r.ok, message: r.message };
         }
         if (key && key.startsWith('sw.')) {
-          fd.sw[key] = !fd.sw[key];
+          const cur = systems.get(key);
+          const next = key === 'sw.iso' ? { AUTO: 'OPEN', OPEN: 'CLOSE', CLOSE: 'AUTO' }[cur] : !cur;
+          const r = systems.set(key, next);
           redrawNow();
-          return { handled: true, ok: true };
+          return { handled: true, ok: r.ok, message: r.message };
+        }
+        if (key && key.startsWith('act.')) {
+          const r = systems.set(key, true);
+          redrawNow();
+          return { handled: true, ok: r.ok, message: r.message };
         }
         const o = (overrides[id] = overrides[id] || {});
         if (c.it.t === 'toggle' || c.it.t === 'guard') o.on = !(o.on ?? c.it.on ?? false);
@@ -501,7 +508,9 @@ export function buildFlightDeck(systems) {
         if (it.key === 'apuGen') return { ...out, lit: !!state.apuGen };
         if (it.key === 'apu') return { ...out, angle: state.apu ? 0.7 : -0.7 };
         if (it.key.startsWith('light.')) return { ...out, on: !!state[it.key] };
-        if (it.key.startsWith('sw.')) return { ...out, on: !!state.sw?.[it.key] };
+        if (it.key === 'sw.iso') return { ...out, angle: { AUTO: 0, OPEN: 0.8, CLOSE: -0.8 }[state['sw.iso']] ?? 0 };
+        if (it.key.startsWith('sw.')) return it.t === 'knob' ? { ...out, angle: state[it.key] ? 0.8 : -0.8 } : { ...out, on: !!state[it.key] };
+        if (it.key.startsWith('act.elec.')) return { ...out, on: (state.elecSrc || []).includes(it.key.slice(9)) };
         if (it.key.startsWith('ann.')) return { ...out, lit: !!state.ann?.[it.key.slice(4)] };
         return out;
       })),
@@ -511,35 +520,13 @@ export function buildFlightDeck(systems) {
   const sysState = () => systems.state;
   const ann = () => systems.annunciators();
 
-  // ---- cockpit-only state: MCP settings, overhead switch positions, master caution
+  // ---- cockpit-only state: MCP settings and master caution memory.
+  // Switch positions and system logic live in the shared systems controller (systems.panel()).
   const fd = {
     mcp: { spd: 250, hdg: 10, alt: 10000, vs: 0, crs: 10, modes: [], cmdA: false, cmdB: false, at: false, fdL: true, fdR: true },
-    sw: {
-      'sw.fuel.aft1': true, 'sw.fuel.fwd1': true, 'sw.fuel.ctrl': false, 'sw.fuel.ctrr': false, 'sw.fuel.fwd2': true, 'sw.fuel.aft2': true,
-      'sw.hyd.elec2': true, 'sw.hyd.eng1': true, 'sw.hyd.eng2': true, 'sw.hyd.elec1': true,
-      'sw.fc.a': true, 'sw.fc.b': true,
-    },
     ack: null, recallUntil: 0, t: 0,
   };
-  // Simplified logic for study: engines are treated as running in flight and stopped on the ground.
-  function computeAnn() {
-    const s = fd.sw;
-    const running = !systems.state.onGround;
-    const sysA = s['sw.hyd.elec2'] || (s['sw.hyd.eng1'] && running);
-    const sysB = s['sw.hyd.elec1'] || (s['sw.hyd.eng2'] && running);
-    const a = {
-      'fuel.aft1': !s['sw.fuel.aft1'], 'fuel.fwd1': !s['sw.fuel.fwd1'], 'fuel.fwd2': !s['sw.fuel.fwd2'], 'fuel.aft2': !s['sw.fuel.aft2'],
-      'fuel.ctrl': false, 'fuel.ctrr': false, // center pump lights stay dark with no center fuel modelled
-      'hyd.elec2': !s['sw.hyd.elec2'], 'hyd.elec1': !s['sw.hyd.elec1'],
-      'hyd.eng1': !s['sw.hyd.eng1'] || !running, 'hyd.eng2': !s['sw.hyd.eng2'] || !running,
-      'fc.a': !s['sw.fc.a'] || !sysA, 'fc.b': !s['sw.fc.b'] || !sysB,
-    };
-    const cats = new Set();
-    if (['fuel.aft1', 'fuel.fwd1', 'fuel.fwd2', 'fuel.aft2'].some((k) => a[k])) cats.add('FUEL');
-    if (['hyd.elec2', 'hyd.elec1', 'hyd.eng1', 'hyd.eng2'].some((k) => a[k])) cats.add('HYD');
-    if (a['fc.a'] || a['fc.b']) cats.add('FLT CONT');
-    return { ann: a, cats };
-  }
+  const computeAnn = () => systems.panel();
   function cautionState() {
     const { cats } = computeAnn();
     if (!fd.ack) fd.ack = new Set(cats); // cold cockpit: existing cautions start acknowledged
@@ -548,7 +535,10 @@ export function buildFlightDeck(systems) {
     const recall = fd.t < fd.recallUntil;
     return { mc: fresh.length > 0 || (recall && cats.size > 0), six: recall ? [...cats] : fresh };
   }
-  const panelState = () => ({ ...systems.state, apuGen: ann().apuGen.state !== 'off', sw: { ...fd.sw }, ann: computeAnn().ann });
+  const panelState = () => {
+    const p = systems.panel();
+    return { ...systems.state, apuGen: ann().apuGen.state !== 'off', ann: p.ann, elecSrc: [p.elec.bus1, p.elec.bus2] };
+  };
 
   // ---- MCP behaviour
   const MCP_GROUPS = [['N1', 'SPEED'], ['VNAV', 'LVL CHG', 'ALT HLD', 'V/S'], ['HDG SEL', 'LNAV', 'VOR LOC', 'APP']];
@@ -619,7 +609,12 @@ export function buildFlightDeck(systems) {
   }
   zone(mainPanel, 'fd-upper-du', 0.205, 0.205, 0.0, 0.05, drawEngines, {
     screen: true,
-    state: () => { const st = sysState(); const a = ann(); return { n1: st.onGround ? 0 : 84.6, egt: st.onGround ? 22 : 712, rev: a.rev.state === 'off' ? '' : a.rev.state }; },
+    state: () => {
+      const st = sysState(); const a = ann();
+      const n1 = !st.engines ? 0 : st.onGround ? 21.5 : 84.6;
+      const egt = !st.engines ? 22 : st.onGround ? 450 : 712;
+      return { n1, egt, rev: a.rev.state === 'off' ? '' : a.rev.state };
+    },
   });
   zone(mainPanel, 'fd-standby', 0.1, 0.1, -0.205, 0.08, drawISFD, { screen: true });
   zone(mainPanel, 'fd-gear-panel', 0.15, 0.26, 0.205, 0.0, drawGearPanel, {
@@ -662,10 +657,7 @@ export function buildFlightDeck(systems) {
   const yTop = 0.34, yBot = -0.2;
   const place = (id, ci, y1, y2, layoutId = id) =>
     zone(ovh, id, cw - 0.006, (y2 - y1) - 0.006, col(ci), (y1 + y2) / 2, L(layoutId), {
-      state: LAYOUTS[layoutId].rows.some((r) => r.some((it) => it.key)) ? () => {
-        const p = panelState();
-        return { apu: !!p.apu, apuGen: p.apuGen, sw: p.sw, ann: p.ann };
-      } : null,
+      state: LAYOUTS[layoutId].rows.some((r) => r.some((it) => it.key)) ? panelState : null,
     });
   place('fd-flight-controls', 0, 0.06, yTop);
   place('fd-nav-displays', 0, -0.06, 0.06);
