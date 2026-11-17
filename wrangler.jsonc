@@ -1,0 +1,10 @@
+// Cloudflare Workers config: serves the Vite build in ./dist as static assets.
+// public/_headers is copied into dist and applied by Cloudflare.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "aircrafty",
+  "compatibility_date": "2025-11-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}
