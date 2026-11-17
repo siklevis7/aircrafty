@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AirCrafty</title>
+  <meta name="description" content="Interactive 3D aircraft systems explorer for type-rating students." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2l3 11 11 5v3l-11-2-1 7 4 3v2l-6-2-6 2v-2l4-3-1-7-11 2v-3l11-5z' fill='%23e4572e'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <script>
+    // set theme before paint to avoid a flash
+    try {
+      const t = JSON.parse(localStorage.getItem('aircrafty:theme'));
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch {}
+  </script>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="AirCrafty home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2l3 11 11 5v3l-11-2-1 7 4 3v2l-6-2-6 2v-2l4-3-1-7-11 2v-3l11-5z"/></svg>
+        <span class="brand-name">Air<b>Crafty</b></span>
+      </a>
+      <nav class="modes" aria-label="Study modes">
+        <button class="mode is-active" type="button" aria-current="page">Exterior</button>
+        <button class="mode" type="button" disabled>Walkaround <i>soon</i></button>
+        <button class="mode" type="button" disabled>Flight deck <i>soon</i></button>
+        <button class="mode" type="button" disabled>Systems <i>soon</i></button>
+        <button class="mode" type="button" disabled>Quiz <i>soon</i></button>
+        <button class="mode" type="button" disabled>Failures <i>soon</i></button>
+      </nav>
+      <div class="top-actions">
+        <label class="ac-select">
+          <span class="sr-only">Aircraft</span>
+          <select id="aircraft"></select>
+        </label>
+        <button class="icon-btn" id="sidebar-toggle" type="button" aria-label="Toggle component list" title="Component list">☰</button>
+        <button class="icon-btn" id="theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Light / dark">
+          <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+          <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+        </button>
+        <button class="icon-btn" id="help-toggle" type="button" aria-label="Keyboard shortcuts" title="Shortcuts" aria-expanded="false">?</button>
+      </div>
+    </header>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="side-head">
+        <div class="eyebrow">Components</div>
+        <div class="progress">
+          <div class="progress-text"><span id="progress-count">0</span> of <span id="progress-total">0</span> explored</div>
+          <div class="progress-bar"><i id="progress-bar"></i></div>
+        </div>
+        <label class="search">
+          <span class="sr-only">Search components</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>
+          <input id="search" type="search" placeholder="Search: pitot, flaps, hydraulic…" autocomplete="off" />
+        </label>
+      </div>
+      <nav class="index" id="index" aria-label="Component index"></nav>
+      <dl class="specs" id="specs"></dl>
+    </aside>
+
+    <main class="stage" id="stage">
+      <div class="stage-title">
+        <div class="eyebrow" id="ac-family"></div>
+        <h1 id="ac-name"></h1>
+        <p class="stage-hint">Click any part · drag to orbit · scroll to zoom</p>
+      </div>
+
+      <div class="view-tools" role="toolbar" aria-label="View">
+        <div class="vt-group" id="views"></div>
+        <div class="vt-group">
+          <button class="vt-btn" id="t-hotspots" type="button" aria-pressed="true" title="Hotspots (H)">Hotspots</button>
+          <button class="vt-btn" id="t-isolate" type="button" aria-pressed="false" title="Isolate selected (I)">Isolate</button>
+        </div>
+      </div>
+
+      <section class="info" id="info" aria-live="polite"></section>
+      <section class="dock" id="dock" aria-label="Aircraft controls"></section>
+      <p class="disclaimer">Study aid only · Not affiliated with or endorsed by Boeing · Always use your operator's FCOM, FCTM and QRH</p>
+      <div class="loading" id="loading"><span>Rolling out the aircraft…</span></div>
+    </main>
+  </div>
+
+  <div class="help" id="help" hidden>
+    <h3>Shortcuts</h3>
+    <dl>
+      <dt>Click</dt><dd>Select a component</dd>
+      <dt>Esc</dt><dd>Deselect</dd>
+      <dt>H</dt><dd>Show / hide hotspots</dd>
+      <dt>I</dt><dd>Isolate the selected part</dd>
+      <dt>[ ]</dt><dd>Flap lever up / down one detent</dd>
+      <dt>G</dt><dd>Gear lever UP / DN</dd>
+      <dt>1–6</dt><dd>Camera views</dd>
+      <dt>/</dt><dd>Search components</dd>
+    </dl>
+  </div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "aircrafty",
+  "version": "1.0.0",
+  "description": "Interactive 3D aircraft systems explorer for type-rating students",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.7"
+  },
+  "private": "true"
+}
