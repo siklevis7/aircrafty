@@ -5,6 +5,7 @@ import { aircraftRegistry, getAircraft } from './aircraft/registry.js';
 import { createIndex } from './ui/partsIndex.js';
 import { createPanel } from './ui/panel.js';
 import { createDock } from './ui/dock.js';
+import { createWalkaround } from './ui/walkaround.js';
 import { toast } from './ui/toast.js';
 
 const $ = (s) => document.querySelector(s);
@@ -47,6 +48,7 @@ async function boot() {
   $('#specs').innerHTML = ac.meta.specs.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
 
   let selected = null;
+  let mode = 'explore';
   const select3d = (id, opts = {}) => {
     selected = id;
     viewer.select(id, opts);
@@ -74,7 +76,7 @@ async function boot() {
   const index = createIndex($('#index'), {
     categories, parts, progress,
     onSelect: (id) => select3d(id),
-    onFilter: (fn) => viewer.setMarkerFilter(fn),
+    onFilter: (fn) => { if (mode !== 'walkaround') viewer.setMarkerFilter(fn); },
   });
   const panel = createPanel($('#info'), {
     categories, parts,
@@ -91,6 +93,59 @@ async function boot() {
   updateInsets();
   viewer.addTicker((dt) => { systems.update(dt); dock.tick(); });
   if (import.meta.env.DEV) window.__aircrafty = { viewer, systems, select: select3d };
+
+  // ---------------------------------------------------------------- modes
+  const walk = ac.walkaround
+    ? createWalkaround($('#walk'), { data: ac.walkaround, parts, aircraftId: ac.meta.id, viewer, onOpenPart: (id) => select3d(id, { focus: false }) })
+    : null;
+  const modeButtons = document.querySelectorAll('.mode[data-mode]');
+  if (!walk) document.querySelector('.mode[data-mode="walkaround"]')?.setAttribute('disabled', '');
+
+  function parkForWalkaround() {
+    // A walkaround happens on the ground with the aircraft parked and configured normally.
+    systems.set('reversers', false);
+    systems.set('speedbrake', 'DOWN');
+    systems.set('gearLever', 'DN');
+    systems.set('doors', false);
+    systems.set('flapLever', 0);
+    ['roll', 'pitch', 'yaw'].forEach((k) => systems.set(k, 0));
+    const land = () => { if (mode === 'walkaround' && !systems.set('onGround', true).ok) setTimeout(land, 300); };
+    land();
+  }
+
+  function setMode(next, { fromHash = false } = {}) {
+    if (next === 'walkaround' && !walk) next = 'explore';
+    if (next === mode && !fromHash) return;
+    mode = next;
+    document.body.dataset.mode = mode;
+    modeButtons.forEach((b) => {
+      const on = b.dataset.mode === mode;
+      b.classList.toggle('is-active', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    select3d(null);
+    const dockEl = $('#dock');
+    if (mode === 'walkaround') {
+      $('#ac-family').textContent = ac.walkaround.title;
+      $('.stage-hint').textContent = 'Follow the numbered route · ← → to move between stops';
+      dockEl.classList.add('is-collapsed');
+      parkForWalkaround();
+      walk.start();
+      if (window.innerWidth <= 820) document.body.classList.remove('sidebar-collapsed');
+    } else {
+      $('#ac-family').textContent = ac.meta.family;
+      $('.stage-hint').textContent = 'Click any part · drag to orbit · scroll to zoom';
+      dockEl.classList.remove('is-collapsed');
+      walk?.stop();
+      index.refresh();
+      viewer.setView(ac.camera.home);
+    }
+    setTimeout(updateInsets, 380);
+    const hash = mode === 'walkaround' ? '#walkaround' : '';
+    if (location.hash !== hash) history.replaceState(null, '', hash || location.pathname + location.search);
+  }
+  modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  window.addEventListener('hashchange', () => setMode(location.hash === '#walkaround' ? 'walkaround' : 'explore'));
 
   function updateProgress() {
     $('#progress-count').textContent = progress.count();
@@ -131,6 +186,7 @@ async function boot() {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
     if (k === 'Escape') { if (!help.hidden) { help.hidden = true; return; } select3d(null); }
+    else if (mode === 'walkaround' && (k === 'ArrowRight' || k === 'ArrowLeft')) { e.preventDefault(); k === 'ArrowRight' ? walk.next() : walk.prev(); }
     else if (k === 'h' || k === 'H') setHot(hotBtn.getAttribute('aria-pressed') !== 'true');
     else if (k === 'i' || k === 'I') setIso(isoBtn.getAttribute('aria-pressed') !== 'true');
     else if (k === '/') { e.preventDefault(); $('#search').focus(); }
@@ -145,8 +201,10 @@ async function boot() {
     } else if (/^[1-9]$/.test(k) && viewNames[+k - 1]) viewer.setView(ac.camera.views[viewNames[+k - 1]]);
   });
 
-  // intro camera move
-  viewer.flyTo(
+  // intro camera move (or straight into the walkaround via #walkaround)
+  if (location.hash === '#walkaround' && walk) {
+    setMode('walkaround', { fromHash: true });
+  } else viewer.flyTo(
     new (viewer.camera.position.constructor)(...ac.camera.home.position),
     new (viewer.camera.position.constructor)(...ac.camera.home.target),
     2.4,

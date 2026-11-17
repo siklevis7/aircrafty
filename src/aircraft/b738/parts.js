@@ -209,6 +209,13 @@ export const parts = [
     notes: ['On the walkaround, check the static wicks and the feel pitots.'],
   },
   {
+    id: 'tail-skid', category: 'structure', name: 'Tail Skid', where: 'Lower aft fuselage',
+    what: 'The -800\'s long fuselage makes a tail strike more likely if the aircraft over-rotates on takeoff or flares too much on landing. The tail skid protects the aft fuselage by touching the runway first.',
+    how: 'A fixed skid with a crushable energy-absorbing cartridge. A tail strike crushes the cartridge, and its warning decal shows whether it needs maintenance attention.',
+    notes: ['Walkaround: check the skid isn\'t damaged and the cartridge indicator is in the normal range.', 'A suspected tail strike calls for the Tail Strike non-normal procedure and a maintenance inspection.'],
+    view: [-0.3, -0.25, -1],
+  },
+  {
     id: 'wing-body-fairing', category: 'structure', name: 'Wing-to-Body Fairing', where: 'Belly at the wing root',
     what: 'Streamlines the joint between wing and fuselage. It also encloses the main wheel wells and the air conditioning pack bay.',
     how: 'Ram air inlets and exhausts for the pack heat exchangers sit on the underside of the fairing.',

@@ -3,12 +3,14 @@
 import { buildModel } from './model.js';
 import { createSystems, controlPanel } from './systems.js';
 import { parts, categories, meta } from './parts.js';
+import { walkaround } from './walkaround.js';
 
 export default {
   meta,
   parts,
   categories,
   controlPanel,
+  walkaround,
   build() {
     const { root, rig } = buildModel();
     const systems = createSystems(rig);

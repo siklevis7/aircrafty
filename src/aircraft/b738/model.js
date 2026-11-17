@@ -643,6 +643,16 @@ export function buildModel() {
     cylinderBetween(airframe, tip, tip.clone().add(V(0.09, 0.02, 0)), 0.035, M.metal, 'tat-probe', 'L');
   }
 
+  // ================================================================== Tail skid
+  {
+    const X = 29.4, st = fuseAt(X);
+    const bottom = st.cY - st.h;
+    const fair = add(airframe, new THREE.BoxGeometry(0.75, 0.2, 0.18), M.belly, 'tail-skid');
+    fair.position.set(wx(X), bottom - 0.06, 0);
+    const shoe = add(airframe, new THREE.BoxGeometry(0.42, 0.06, 0.14), M.darkMetal, 'tail-skid');
+    shoe.position.set(wx(X + 0.1), bottom - 0.18, 0);
+  }
+
   // ================================================================== Antennas
   const bladeGeom = (h, c) => {
     const s = new THREE.Shape();

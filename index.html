@@ -25,8 +25,8 @@
         <span class="brand-name">Air<b>Crafty</b></span>
       </a>
       <nav class="modes" aria-label="Study modes">
-        <button class="mode is-active" type="button" aria-current="page">Exterior</button>
-        <button class="mode" type="button" disabled>Walkaround <i>soon</i></button>
+        <button class="mode is-active" type="button" data-mode="explore" aria-current="page">Exterior</button>
+        <button class="mode" type="button" data-mode="walkaround">Walkaround</button>
         <button class="mode" type="button" disabled>Flight deck <i>soon</i></button>
         <button class="mode" type="button" disabled>Systems <i>soon</i></button>
         <button class="mode" type="button" disabled>Quiz <i>soon</i></button>
@@ -61,6 +61,7 @@
       </div>
       <nav class="index" id="index" aria-label="Component index"></nav>
       <dl class="specs" id="specs"></dl>
+      <div class="walk" id="walk" hidden></div>
     </aside>
 
     <main class="stage" id="stage">
@@ -92,6 +93,7 @@
       <dt>Esc</dt><dd>Deselect</dd>
       <dt>H</dt><dd>Show / hide hotspots</dd>
       <dt>I</dt><dd>Isolate the selected part</dd>
+      <dt>← →</dt><dd>Walkaround: previous / next stop</dd>
       <dt>[ ]</dt><dd>Flap lever up / down one detent</dd>
       <dt>G</dt><dd>Gear lever UP / DN</dd>
       <dt>1–6</dt><dd>Camera views</dd>

@@ -16,6 +16,7 @@ export class Viewer {
     this.pickables = [];
     this.hoverId = null;
     this.selectedId = null;
+    this.highlightSet = new Set();
     this.isolate = false;
     this.showHotspots = true;
     this.colors = { accent: new THREE.Color('#e4572e'), hover: new THREE.Color('#127fbf') };
@@ -86,6 +87,9 @@ export class Viewer {
     this.markerLayer = document.createElement('div');
     this.markerLayer.className = 'marker-layer';
     container.appendChild(this.markerLayer);
+    this.routeLayer = document.createElement('div');
+    this.routeLayer.className = 'route-layer';
+    container.appendChild(this.routeLayer);
     this.tooltip = document.createElement('div');
     this.tooltip.className = 'tooltip';
     container.appendChild(this.tooltip);
@@ -136,6 +140,7 @@ export class Viewer {
     this.ground.material.opacity = shadow;
     this.colors.accent.set(accent);
     this.colors.hover.set(hover);
+    if (this.routeLine) this.routeLine.material.color.set(accent);
     this.renderer.toneMappingExposure = exposure;
     this._refreshHighlights(true);
   }
@@ -182,16 +187,83 @@ export class Viewer {
     this.flyTo(new THREE.Vector3(...view.position), new THREE.Vector3(...view.target));
   }
 
-  flyTo(position, target, duration = 1.1) {
+  flyTo(position, target, duration = 1.1, { arc = 0 } = {}) {
     this.flight = {
       p0: this.camera.position.clone(), t0: this.controls.target.clone(),
-      p1: position.clone(), t1: target.clone(), time: 0, duration,
+      p1: position.clone(), t1: target.clone(), time: 0, duration, arc,
     };
+  }
+
+  /** Highlight several parts at once (e.g. everything to check at a walkaround station). */
+  setHighlightSet(ids = []) {
+    const next = new Set(ids);
+    this.highlightSet.forEach((id) => {
+      if (!next.has(id) && id !== this.hoverId && id !== this.selectedId) {
+        this.partMeshes.get(id)?.forEach((m) => { m.userData.hl = false; m.material.emissive.copy(m.userData.baseEmissive); });
+      }
+    });
+    this.highlightSet = next;
+  }
+
+  /** Draw a walking route on the ground with numbered pins. points: [[x, z], ...] */
+  setRoute(points, { onPick } = {}) {
+    this.clearRoute();
+    if (!points?.length) return;
+    const curve = new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0.03, z)), true, 'centripetal');
+    const geom = new THREE.BufferGeometry().setFromPoints(curve.getPoints(points.length * 24));
+    const line = new THREE.Line(geom, new THREE.LineDashedMaterial({
+      color: this.colors.accent, dashSize: 0.6, gapSize: 0.45, transparent: true, opacity: 0.9,
+    }));
+    line.computeLineDistances();
+    line.raycast = () => {};
+    this.routeLine = line;
+    this.scene.add(line);
+    this.routePins = points.map(([x, z], i) => {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'route-pin';
+      el.textContent = String(i + 1);
+      el.addEventListener('click', (e) => { e.stopPropagation(); onPick?.(i); });
+      this.routeLayer.appendChild(el);
+      return { el, world: new THREE.Vector3(x, 0.05, z) };
+    });
+  }
+
+  setRouteState(active, done = new Set()) {
+    this.routePins?.forEach((p, i) => {
+      p.el.classList.toggle('is-active', i === active);
+      p.el.classList.toggle('is-done', done.has(i));
+    });
+  }
+
+  clearRoute() {
+    if (this.routeLine) {
+      this.scene.remove(this.routeLine);
+      this.routeLine.geometry.dispose();
+      this.routeLine.material.dispose();
+      this.routeLine = null;
+    }
+    this.routeLayer.innerHTML = '';
+    this.routePins = null;
+  }
+
+  _updateRoute() {
+    if (!this.routePins) return;
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    const p = new THREE.Vector3();
+    for (const pin of this.routePins) {
+      p.copy(pin.world).project(this.camera);
+      const vis = p.z < 1 && Math.abs(p.x) < 1.15 && Math.abs(p.y) < 1.15;
+      pin.el.style.transform = `translate3d(${((p.x + 1) / 2) * w}px, ${((1 - p.y) / 2) * h}px, 0)`;
+      pin.el.classList.toggle('is-offscreen', !vis);
+    }
   }
 
   _cancelFlight() { this.flight = null; }
 
   // ------------------------------------------------------------------ internals
+  setFov(deg) { this.camera.fov = deg; this.camera.updateProjectionMatrix(); }
+
   /** Keep the visual center clear of overlay panels (px covered on the right / bottom). */
   setInsets({ right = 0, bottom = 0 }) { this.insetTarget = { right, bottom }; }
 
@@ -265,7 +337,7 @@ export class Viewer {
   }
 
   _refreshHighlights(force = false, prevId = null) {
-    if (prevId && prevId !== this.hoverId && prevId !== this.selectedId) {
+    if (prevId && prevId !== this.hoverId && prevId !== this.selectedId && !this.highlightSet.has(prevId)) {
       this.partMeshes.get(prevId)?.forEach((m) => { m.userData.hl = false; m.material.emissive.copy(m.userData.baseEmissive); });
     }
     if (!force) return;
@@ -278,6 +350,8 @@ export class Viewer {
         m.material.emissive.copy(m.userData.baseEmissive).lerp(color, k);
       });
     };
+    const pulse = 0.26 + 0.12 * Math.sin(time * 3.2);
+    this.highlightSet.forEach((id) => { if (id !== this.selectedId && id !== this.hoverId) apply(id, this.colors.accent, pulse); });
     if (this.selectedId) apply(this.selectedId, this.colors.accent, 0.42 + 0.16 * Math.sin(time * 3.2));
     if (this.hoverId && this.hoverId !== this.selectedId) apply(this.hoverId, this.colors.hover, 0.38);
   }
@@ -391,6 +465,7 @@ export class Viewer {
       f.time += dt;
       const k = ease(Math.min(1, f.time / f.duration));
       this.camera.position.lerpVectors(f.p0, f.p1, k);
+      if (f.arc) this.camera.position.y += Math.sin(Math.PI * k) * f.arc;
       this.controls.target.lerpVectors(f.t0, f.t1, k);
       if (k >= 1) this.flight = null;
     }
@@ -400,6 +475,7 @@ export class Viewer {
     this.ground.visible = above;
     this._paintHighlights(now);
     this._updateMarkers(now);
+    this._updateRoute();
     this.renderer.render(this.scene, this.camera);
   }
 }
