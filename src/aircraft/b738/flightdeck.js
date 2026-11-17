@@ -19,14 +19,14 @@ const LAYOUTS = {
   'fd-flight-controls': { title: 'FLIGHT CONTROL', rows: [[G('FLT CONTROL A', { key: 'sw.fc.a' }), G('FLT CONTROL B', { key: 'sw.fc.b' })], [A('LOW PRESS', 'amber', { key: 'ann.fc.a' }), A('LOW PRESS', 'amber', { key: 'ann.fc.b' })], [G('SPOILER A', { on: true }), G('SPOILER B', { on: true })], [G('ALTN FLAPS', { key: 'sw.altflaps' }), T('UP / DN')], [T('YAW DAMPER', { on: true }), A('YAW DAMPER')]] },
   'fd-nav-displays': { title: 'NAVIGATION / DISPLAYS', rows: [[K('VHF NAV'), K('IRS'), K('FMC'), K('DISPLAYS'), K('CONTROL')]] },
   'fd-fuel': { title: 'FUEL', rows: [[GA('FUEL TEMP'), A('VALVE\nOPEN', 'blue'), K('CROSSFEED', { key: 'sw.fuel.xfeed' }), A('VALVE\nOPEN', 'blue', { key: 'ann.fuel.xfeed' })], [T('AFT 1', { key: 'sw.fuel.aft1' }), T('FWD 1', { key: 'sw.fuel.fwd1' }), T('CTR L', { key: 'sw.fuel.ctrl' }), T('CTR R', { key: 'sw.fuel.ctrr' }), T('FWD 2', { key: 'sw.fuel.fwd2' }), T('AFT 2', { key: 'sw.fuel.aft2' })], [A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrl' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrr' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd2' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft2' })]] },
-  'fd-electrical': { title: 'ELECTRICAL', rows: [[GA('DC'), GA('AC')], [K('DC SEL'), G('BAT', { key: 'sw.battery' }), K('AC SEL')], [A('TRANSFER\nBUS OFF', 'amber', { key: 'ann.elec.tbo1' }), A('SOURCE\nOFF'), A('TRANSFER\nBUS OFF', 'amber', { key: 'ann.elec.tbo2' })], [G('STANDBY\nPOWER', { key: 'sw.stbypower' }), T('GRD PWR', { key: 'act.elec.ext' }), T('BUS XFR', { key: 'sw.bustransfer' })], [T('GEN 1', { key: 'act.elec.gen1' }), T('APU GEN', { key: 'act.elec.apu' }), T('GEN 2', { key: 'act.elec.gen2' })]] },
+  'fd-electrical': { title: 'ELECTRICAL', rows: [[A('GEN 1\nDRIVE', 'amber', { key: 'ann.elec.drive1' }), GA('DC'), GA('AC'), A('GEN 2\nDRIVE', 'amber', { key: 'ann.elec.drive2' })], [K('DC SEL'), G('BAT', { key: 'sw.battery' }), K('AC SEL')], [A('TRANSFER\nBUS OFF', 'amber', { key: 'ann.elec.tbo1' }), A('SOURCE\nOFF'), A('TRANSFER\nBUS OFF', 'amber', { key: 'ann.elec.tbo2' })], [G('STANDBY\nPOWER', { key: 'sw.stbypower' }), T('GRD PWR', { key: 'act.elec.ext' }), T('BUS XFR', { key: 'sw.bustransfer' })], [T('GEN 1', { key: 'act.elec.gen1' }), T('APU GEN', { key: 'act.elec.apu' }), T('GEN 2', { key: 'act.elec.gen2' })]] },
   'fd-apu': { title: 'APU', rows: [[GA('APU EGT'), A('MAINT', 'blue'), A('LOW OIL\nPRESS')], [A('FAULT'), A('OVER\nSPEED'), K('APU', { key: 'apu' })], [A('APU GEN\nOFF BUS', 'blue', { key: 'apuGen' })]] },
   'fd-cabin-signs': { title: 'CABIN / EQUIP', rows: [[T('EQUIP COOL\nSUPPLY'), T('EQUIP COOL\nEXHAUST')], [G('EMER EXIT\nLIGHTS', { on: true }), A('NOT\nARMED')], [T('NO SMOKING', { on: true }), T('FASTEN BELTS', { on: true })], [B('ATTEND'), B('GRD CALL')]] },
   'fd-window-probe-heat': { title: 'WINDOW / PROBE HEAT', rows: [[A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true })], [T('L SIDE', { on: true }), T('L FWD', { on: true }), T('R FWD', { on: true }), T('R SIDE', { on: true })], [T('PROBE A'), T('TEST'), T('PROBE B')], [A('CAPT\nPITOT'), A('L ELEV\nPITOT'), A('F/O\nPITOT'), A('TEMP\nPROBE')]] },
   'fd-anti-ice': { title: 'ANTI-ICE', rows: [[A('WING\nANTI-ICE', 'blue', { key: 'ann.ai.wing' }), A('COWL\nANTI-ICE'), A('COWL\nANTI-ICE')], [T('WING', { key: 'sw.wingai' }), T('ENG 1'), T('ENG 2')]] },
   'fd-hydraulics': { title: 'HYDRAULIC PUMPS', rows: [[A('OVER\nHEAT'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('OVER\nHEAT')], [T('ELEC 2', { key: 'sw.hyd.elec2' }), T('ENG 1', { key: 'sw.hyd.eng1' }), T('ENG 2', { key: 'sw.hyd.eng2' }), T('ELEC 1', { key: 'sw.hyd.elec1' })], [A('LOW\nPRESS', 'amber', { key: 'ann.hyd.elec2' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.eng1' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.eng2' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.elec1' })]] },
   'fd-air-conditioning': { title: 'AIR CONDITIONING', rows: [[GA('TEMP'), K('TEMP SEL')], [K('CONT CAB'), K('FWD CAB'), K('AFT CAB')], [T('L RECIRC', { on: true }), T('R RECIRC', { on: true })]] },
-  'fd-bleed-air': { title: 'BLEED AIR', rows: [[GA('DUCT PRESS'), A('DUAL\nBLEED', 'amber', { key: 'ann.bleed.dual' })], [A('PACK'), A('WING-BODY\nOVHT'), A('BLEED\nTRIP OFF')], [T('L PACK', { key: 'sw.pack.l' }), K('ISOLATION', { key: 'sw.iso' }), T('R PACK', { key: 'sw.pack.r' })], [T('BLEED 1', { key: 'sw.bleed1' }), T('APU BLEED', { key: 'sw.apubleed' }), T('BLEED 2', { key: 'sw.bleed2' })]] },
+  'fd-bleed-air': { title: 'BLEED AIR', rows: [[GA('DUCT PRESS'), A('DUAL\nBLEED', 'amber', { key: 'ann.bleed.dual' })], [A('BLEED 1\nTRIP OFF', 'amber', { key: 'ann.bleed.trip1' }), A('WING-BODY\nOVHT'), A('BLEED 2\nTRIP OFF', 'amber', { key: 'ann.bleed.trip2' })], [T('L PACK', { key: 'sw.pack.l' }), K('ISOLATION', { key: 'sw.iso' }), T('R PACK', { key: 'sw.pack.r' })], [T('BLEED 1', { key: 'sw.bleed1' }), T('APU BLEED', { key: 'sw.apubleed' }), T('BLEED 2', { key: 'sw.bleed2' })]] },
   'fd-pressurization': { title: 'PRESSURIZATION', rows: [[{ t: 'screen', text: '35000', label: 'FLT ALT' }, { t: 'screen', text: '00000', label: 'LAND ALT' }], [GA('VALVE'), K('MODE'), T('MAN')]] },
   'fd-exterior-lights': { title: '', rows: [[T('L LANDING', { key: 'light.landing' }), T('R LANDING', { key: 'light.landing' }), T('L TURNOFF', { key: 'light.turnoff' }), T('R TURNOFF', { key: 'light.turnoff' }), T('TAXI', { key: 'light.taxi' })]] },
   'fd-exterior-lights-2': { title: '', rows: [[T('LOGO', { key: 'light.logo' }), T('POSITION', { key: 'light.nav' }), T('STROBE', { key: 'light.strobe' }), T('ANTI COLL', { key: 'light.beacon' }), T('WING', { key: 'light.wing' })]] },
@@ -160,10 +160,11 @@ function drawEngines(ctx, W, H, s) {
     if (lab) ctx.fillText(lab, W / 2, y);
   };
   const r = W * 0.15;
-  dial(W * 0.28, H * 0.25, r, s.n1 / 110, s.n1.toFixed(1), 'N1');
-  dial(W * 0.72, H * 0.25, r, s.n1 / 110, s.n1.toFixed(1), '');
-  dial(W * 0.28, H * 0.58, r * 0.8, s.egt / 1000, String(Math.round(s.egt)), 'EGT');
-  dial(W * 0.72, H * 0.58, r * 0.8, s.egt / 1000, String(Math.round(s.egt)), '');
+  const n1 = s.n1L ?? s.n1, n1R = s.n1R ?? s.n1, egtL = s.egtL ?? s.egt, egtR = s.egtR ?? s.egt;
+  dial(W * 0.28, H * 0.25, r, n1 / 110, n1.toFixed(1), 'N1');
+  dial(W * 0.72, H * 0.25, r, n1R / 110, n1R.toFixed(1), '');
+  dial(W * 0.28, H * 0.58, r * 0.8, egtL / 1000, String(Math.round(egtL)), 'EGT');
+  dial(W * 0.72, H * 0.58, r * 0.8, egtR / 1000, String(Math.round(egtR)), '');
   if (s.rev) {
     ctx.font = `700 ${W * 0.05}px "JetBrains Mono", monospace`; ctx.fillStyle = s.rev === 'green' ? '#2bd46a' : '#ffb000';
     ctx.fillText('REV', W * 0.28, H * 0.09); ctx.fillText('REV', W * 0.72, H * 0.09);
@@ -611,9 +612,10 @@ export function buildFlightDeck(systems) {
     screen: true,
     state: () => {
       const st = sysState(); const a = ann();
-      const n1 = !st.engines ? 0 : st.onGround ? 21.5 : 84.6;
-      const egt = !st.engines ? 22 : st.onGround ? 450 : 712;
-      return { n1, egt, rev: a.rev.state === 'off' ? '' : a.rev.state };
+      const eng = systems.panel().eng;
+      const n1For = (run) => (!run ? 0 : st.onGround ? 21.5 : 84.6);
+      const egtFor = (run) => (!run ? 22 : st.onGround ? 450 : 712);
+      return { n1L: n1For(eng.run1), n1R: n1For(eng.run2), egtL: egtFor(eng.run1), egtR: egtFor(eng.run2), rev: a.rev.state === 'off' ? '' : a.rev.state };
     },
   });
   zone(mainPanel, 'fd-standby', 0.1, 0.1, -0.205, 0.08, drawISFD, { screen: true });
@@ -874,5 +876,11 @@ export function buildFlightDeck(systems) {
     dynamic.forEach((f) => f());
   }
 
-  return { root, update, setNight };
+  /** Treat the current cautions as acknowledged (used just before a failure is injected). */
+  function ackCautions() {
+    fd.ack = new Set(systems.panel().cats);
+    fd.recallUntil = 0;
+  }
+
+  return { root, update, setNight, ackCautions };
 }

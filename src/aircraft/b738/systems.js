@@ -90,6 +90,10 @@ export function createSystems(rig) {
     'elec.bus1': 'ext', 'elec.bus2': 'ext', // source selected for each AC transfer bus
     'sw.bleed1': true, 'sw.bleed2': true, 'sw.apubleed': false, 'sw.iso': 'AUTO',
     'sw.pack.l': true, 'sw.pack.r': true, 'sw.wingai': false,
+    // ---- injected failures (Failures mode)
+    'fail.eng1': false, 'fail.eng2': false, 'fail.gen1': false, 'fail.gen2': false,
+    'fail.hyd.a': false, 'fail.hyd.b': false, 'fail.edp.a': false, 'fail.edp.b': false,
+    'fail.bleed1': false, 'fail.bleed2': false, 'fail.fuel.fwd1': false,
   };
   // animated values
   const cur = {
@@ -185,8 +189,13 @@ export function createSystems(rig) {
   // ------------------------------------------------------------------ systems logic
   // Simplified, rule-based models for study. They follow the real architecture
   // (who powers what) without simulating pressures, voltages or quantities.
+  const eng1Run = () => state.engines && !state['fail.eng1'];
+  const eng2Run = () => state.engines && !state['fail.eng2'];
   function sources() {
-    return { gen1: state.engines, gen2: state.engines, apu: cur.apuSpool >= 0.999, ext: state.onGround };
+    return {
+      gen1: eng1Run() && !state['fail.gen1'], gen2: eng2Run() && !state['fail.gen2'],
+      apu: cur.apuSpool >= 0.999, ext: state.onGround,
+    };
   }
 
   function electrical() {
@@ -212,10 +221,12 @@ export function createSystems(rig) {
   }
 
   function hydraulics(e) {
-    const run = state.engines;
+    const lossA = state['fail.hyd.a'], lossB = state['fail.hyd.b']; // fluid loss: no pump can pressurize
     const p = {
-      eng1: state['sw.hyd.eng1'] && run, elec2: state['sw.hyd.elec2'] && e.tbus2,
-      eng2: state['sw.hyd.eng2'] && run, elec1: state['sw.hyd.elec1'] && e.tbus1,
+      eng1: state['sw.hyd.eng1'] && eng1Run() && !state['fail.edp.a'] && !lossA,
+      elec2: state['sw.hyd.elec2'] && e.tbus2 && !lossA,
+      eng2: state['sw.hyd.eng2'] && eng2Run() && !state['fail.edp.b'] && !lossB,
+      elec1: state['sw.hyd.elec1'] && e.tbus1 && !lossB,
     };
     const A = p.eng1 || p.elec2;
     const B = p.eng2 || p.elec1;
@@ -223,9 +234,11 @@ export function createSystems(rig) {
     const stbyAuto = (!A || !B) && state.flapLever > 0 && !state.onGround;
     const stby = (stbyManual || stbyAuto) && e.tbus1;
     // PTU: system A pressure drives a pump for system B's leading-edge devices when B's engine pump is lost.
-    const ptu = A && !state.onGround && !p.eng2 && state.flapLever > 0 && state.flapLever < 15;
+    const ptu = A && !lossB && !state.onGround && !p.eng2 && state.flapLever > 0 && state.flapLever < 15;
+    // LGTU: system B volume raises the gear if engine 1 is lost during takeoff.
+    const lgtu = B && !state.onGround && !eng1Run() && state.gearLever === 'UP' && cur.gear < 0.999;
     return {
-      pumps: p, A, B, stby, stbyAuto, ptu,
+      pumps: p, A, B, stby, stbyAuto, ptu, lgtu, lossA, lossB,
       fcA: A && state['sw.fc.a'], fcB: B && state['sw.fc.b'],
       users: {
         fcA: A && state['sw.fc.a'], spoilersA: A, groundSpoilers: A, gear: A, nws: A, altBrakes: A, rev1: A || stby, apA: A,
@@ -236,7 +249,7 @@ export function createSystems(rig) {
   }
 
   function fuel(e) {
-    const pump = (k, bus) => state[`sw.fuel.${k}`] && bus;
+    const pump = (k, bus) => state[`sw.fuel.${k}`] && bus && !state[`fail.fuel.${k}`];
     const p = {
       aft1: pump('aft1', e.tbus1), fwd1: pump('fwd1', e.tbus1), ctrl: pump('ctrl', e.tbus1),
       ctrr: pump('ctrr', e.tbus2), fwd2: pump('fwd2', e.tbus2), aft2: pump('aft2', e.tbus2),
@@ -249,19 +262,19 @@ export function createSystems(rig) {
     const rightPress = !!rightSrc || (xfeed && !!leftSrc);
     if (!leftSrc && xfeed && rightSrc) leftSrc = 'xfeed';
     if (!rightSrc && xfeed && leftSrc && leftSrc !== 'xfeed') rightSrc = 'xfeed';
-    const run = state.engines;
+    const r1 = eng1Run(), r2 = eng2Run();
     return {
       pumps: p, xfeed, leftPress, rightPress, leftSrc, rightSrc,
-      eng1Feed: run, eng2Feed: run, // engines suction-feed from their main tanks if no pump pressure
-      eng1Suction: run && !leftPress, eng2Suction: run && !rightPress,
+      eng1Feed: r1, eng2Feed: r2, // engines suction-feed from their main tanks if no pump pressure
+      eng1Suction: r1 && !leftPress, eng2Suction: r2 && !rightPress,
       apuFeed: state.apu,
     };
   }
 
   function bleed() {
-    const run = state.engines;
     const apuReady = cur.apuSpool >= 0.999;
-    const eb1 = state['sw.bleed1'] && run, eb2 = state['sw.bleed2'] && run;
+    const eb1 = state['sw.bleed1'] && eng1Run() && !state['fail.bleed1'];
+    const eb2 = state['sw.bleed2'] && eng2Run() && !state['fail.bleed2'];
     const apub = state['sw.apubleed'] && apuReady;
     const iso = state['sw.iso'];
     const isoOpen = iso === 'OPEN' || (iso === 'AUTO' && !(state['sw.bleed1'] && state['sw.bleed2'] && state['sw.pack.l'] && state['sw.pack.r']));
@@ -292,13 +305,18 @@ export function createSystems(rig) {
       'elec.tbo1': !e.tbus1, 'elec.tbo2': !e.tbus2,
       'bleed.dual': b.dualBleed, 'ai.wing': b.wingAI,
       'fuel.xfeed': f.xfeed,
+      'bleed.trip1': state['fail.bleed1'], 'bleed.trip2': state['fail.bleed2'],
+      'elec.drive1': state['fail.gen1'], 'elec.drive2': state['fail.gen2'],
+      'elec.batdisch': e.batteryDischarging && !state.onGround,
     };
     const cats = new Set();
     if (['fuel.aft1', 'fuel.fwd1', 'fuel.fwd2', 'fuel.aft2', 'fuel.ctrl', 'fuel.ctrr'].some((k) => ann[k])) cats.add('FUEL');
     if (['hyd.elec2', 'hyd.elec1', 'hyd.eng1', 'hyd.eng2'].some((k) => ann[k])) cats.add('HYD');
     if (ann['fc.a'] || ann['fc.b']) cats.add('FLT CONT');
-    if (ann['elec.tbo1'] || ann['elec.tbo2']) cats.add('ELEC');
-    return { elec: e, hyd: h, fuel: f, bleed: b, ann, cats };
+    if (ann['elec.tbo1'] || ann['elec.tbo2'] || ann['elec.drive1'] || ann['elec.drive2']) cats.add('ELEC');
+    if (ann['bleed.trip1'] || ann['bleed.trip2']) cats.add('AIR COND');
+    const eng = { run1: eng1Run(), run2: eng2Run() };
+    return { elec: e, hyd: h, fuel: f, bleed: b, eng, ann, cats };
   }
 
   /** Apply several settings in order (used by "Try it" buttons). */

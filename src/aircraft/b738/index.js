@@ -7,7 +7,7 @@ import { walkaround } from './walkaround.js';
 import { fdParts, fdCategories } from './flightdeck-parts.js';
 import { buildFlightDeck } from './flightdeck.js';
 import { schematics, schematicParts, schematicCategories, schematicScenario } from './schematics.js';
-import { quizBank } from './quiz.js';
+import { failureScenarios, normalFlightConfig, annunciatorLabels } from './failures.js';
 
 export default {
   meta,
@@ -15,7 +15,7 @@ export default {
   categories,
   controlPanel,
   walkaround,
-  quiz: quizBank,
+  failures: { scenarios: failureScenarios, normal: normalFlightConfig, labels: annunciatorLabels },
   schematics: { systems: schematics, parts: schematicParts, categories: schematicCategories, scenario: schematicScenario },
   flightDeck: {
     parts: fdParts,

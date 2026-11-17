@@ -41,13 +41,13 @@ const hydraulics = {
   id: 'hydraulics', category: 'sys-hydraulics', title: 'Hydraulics', color: 'hyd',
   intro: 'Two independent 3,000 psi systems, A and B, each with an engine-driven and an electric pump, plus a standby system. Click a pump or switch to change it.',
   nodes: [
-    { id: 'resA', kind: 'tank', label: 'SYSTEM A RESERVOIR', x: 90, y: 40, w: 150, h: 44, active: (c) => c.hyd.A, part: 'sys-hyd-reservoir' },
+    { id: 'resA', kind: 'tank', label: 'SYSTEM A RESERVOIR', x: 90, y: 40, w: 150, h: 44, active: (c) => c.hyd.A, part: 'sys-hyd-reservoir', status: (c) => (c.hyd.lossA ? 'FLUID LOSS' : '') },
     { id: 'resS', kind: 'tank', label: 'STANDBY RESERVOIR', x: 425, y: 40, w: 150, h: 44, active: (c) => c.hyd.stby, part: 'sys-hyd-standby' },
-    { id: 'resB', kind: 'tank', label: 'SYSTEM B RESERVOIR', x: 760, y: 40, w: 150, h: 44, active: (c) => c.hyd.B, part: 'sys-hyd-reservoir' },
-    { id: 'eng1', kind: 'pump', label: 'ENG 1', x: 110, y: 150, active: (c) => c.hyd.pumps.eng1, part: 'sys-hyd-edp', control: { key: 'sw.hyd.eng1', type: 'toggle' } },
+    { id: 'resB', kind: 'tank', label: 'SYSTEM B RESERVOIR', x: 760, y: 40, w: 150, h: 44, active: (c) => c.hyd.B, part: 'sys-hyd-reservoir', status: (c) => (c.hyd.lossB ? 'FLUID LOSS' : '') },
+    { id: 'eng1', kind: 'pump', label: 'ENG 1', x: 110, y: 150, active: (c) => c.hyd.pumps.eng1, part: 'sys-hyd-edp', control: { key: 'sw.hyd.eng1', type: 'toggle' }, status: (c) => (c.s['fail.edp.a'] ? 'FAILED' : !c.eng.run1 ? 'NO ENGINE' : c.s['sw.hyd.eng1'] ? 'ON' : 'OFF') },
     { id: 'elec2', kind: 'pump', label: 'ELEC 2', x: 220, y: 150, active: (c) => c.hyd.pumps.elec2, part: 'sys-hyd-emdp', control: { key: 'sw.hyd.elec2', type: 'toggle' } },
     { id: 'stbyPump', kind: 'pump', label: 'STBY', x: 500, y: 150, active: (c) => c.hyd.stby, part: 'sys-hyd-standby', status: (c) => (c.hyd.stbyAuto ? 'AUTO' : c.hyd.stby ? 'ON' : 'OFF') },
-    { id: 'eng2', kind: 'pump', label: 'ENG 2', x: 780, y: 150, active: (c) => c.hyd.pumps.eng2, part: 'sys-hyd-edp', control: { key: 'sw.hyd.eng2', type: 'toggle' } },
+    { id: 'eng2', kind: 'pump', label: 'ENG 2', x: 780, y: 150, active: (c) => c.hyd.pumps.eng2, part: 'sys-hyd-edp', control: { key: 'sw.hyd.eng2', type: 'toggle' }, status: (c) => (c.s['fail.edp.b'] ? 'FAILED' : !c.eng.run2 ? 'NO ENGINE' : c.s['sw.hyd.eng2'] ? 'ON' : 'OFF') },
     { id: 'elec1', kind: 'pump', label: 'ELEC 1', x: 890, y: 150, active: (c) => c.hyd.pumps.elec1, part: 'sys-hyd-emdp', control: { key: 'sw.hyd.elec1', type: 'toggle' } },
     { id: 'manA', kind: 'bus', label: 'SYSTEM A · 3000 PSI', x: 70, y: 235, w: 260, active: (c) => c.hyd.A, part: 'sys-hyd-a' },
     { id: 'manS', kind: 'bus', label: 'STANDBY', x: 420, y: 235, w: 160, active: (c) => c.hyd.stby, part: 'sys-hyd-standby' },
@@ -58,7 +58,7 @@ const hydraulics = {
     user('s-rev', 'Reversers (backup)', 435, uy(1), 145, (c) => c.hyd.stby, 'sys-hyd-standby'),
     user('s-le', 'LE devices (extend)', 435, uy(2), 145, (c) => c.hyd.stby, 'sys-hyd-standby'),
     { id: 'ptu', kind: 'box', label: 'POWER TRANSFER UNIT', x: 420, y: 430, w: 160, h: 34, active: (c) => c.hyd.ptu, part: 'sys-hyd-ptu' },
-    { id: 'lgtu', kind: 'box', label: 'LANDING GEAR XFR UNIT', x: 420, y: 490, w: 160, h: 34, active: () => false, part: 'sys-hyd-lgtu' },
+    { id: 'lgtu', kind: 'box', label: 'LANDING GEAR XFR UNIT', x: 420, y: 490, w: 160, h: 34, active: (c) => c.hyd.lgtu, part: 'sys-hyd-lgtu' },
     { id: 'altFlaps', kind: 'box', label: 'ALTERNATE FLAPS', x: 420, y: 556, w: 160, h: 30, active: (c) => c.s['sw.altflaps'], part: 'sys-hyd-standby', control: { key: 'sw.altflaps', type: 'toggle', on: 'ARM', off: 'OFF' } },
   ],
   lines: [
@@ -83,8 +83,8 @@ const hydraulics = {
     { pts: [[330, 241], [395, 241], [395, 447], [420, 447]], live: (c) => c.hyd.ptu, sys: 'a' },
     { pts: [[580, 447], [615, 447], [615, uy(3) + 15], [700, uy(3) + 15]], live: (c) => c.hyd.ptu, sys: 'b' },
     // LGTU: system B volume for gear retraction if engine 1 is lost during takeoff
-    { pts: [[685, uy(7) + 15], [685, 610], [500, 610], [500, 524]], live: () => false, sys: 'b' },
-    { pts: [[420, 507], [360, 507], [360, uy(3) + 15], [330, uy(3) + 15]], live: () => false, sys: 'b' },
+    { pts: [[685, uy(7) + 15], [685, 610], [500, 610], [500, 524]], live: (c) => c.hyd.lgtu, sys: 'b' },
+    { pts: [[420, 507], [360, 507], [360, uy(3) + 15], [330, uy(3) + 15]], live: (c) => c.hyd.lgtu, sys: 'b' },
   ],
 };
 
@@ -92,7 +92,7 @@ const hydraulics = {
 const src = (id, label, x, key, availKey, part) => ({
   id, kind: 'source', label, x, y: 40, w: 150, h: 54, part,
   active: (c) => c.elec.bus1 === availKey || c.elec.bus2 === availKey,
-  status: (c) => (c.elec.bus1 === availKey || c.elec.bus2 === availKey ? 'ON BUS' : c.elec.avail[availKey] ? 'AVAILABLE' : 'NOT AVAILABLE'),
+  status: (c) => (c.s['fail.' + availKey] ? 'FAILED' : c.elec.bus1 === availKey || c.elec.bus2 === availKey ? 'ON BUS' : c.elec.avail[availKey] ? 'AVAILABLE' : 'NOT AVAILABLE'),
   control: { key, type: 'action' },
 });
 const electrical = {
@@ -146,9 +146,9 @@ const fuel = {
   id: 'fuel', category: 'sys-fuel', title: 'Fuel', color: 'fuel',
   intro: 'Three tanks with two AC boost pumps each. Each main tank normally feeds its own engine, and the crossfeed valve joins the two sides. Click a pump or the crossfeed valve.',
   nodes: [
-    { id: 'eng1', kind: 'source', label: 'ENGINE 1', x: 60, y: 90, w: 170, h: 60, active: (c) => c.fuel.eng1Feed, part: 'sys-fuel-suction', status: (c) => (!c.s.engines ? 'NOT RUNNING' : c.fuel.eng1Suction ? 'SUCTION FEED' : c.fuel.leftSrc === 'ctr' ? 'FED FROM CENTER' : c.fuel.leftSrc === 'xfeed' ? 'VIA CROSSFEED' : 'FED FROM MAIN 1') },
+    { id: 'eng1', kind: 'source', label: 'ENGINE 1', x: 60, y: 90, w: 170, h: 60, active: (c) => c.fuel.eng1Feed, part: 'sys-fuel-suction', status: (c) => (c.s['fail.eng1'] ? 'FAILED' : !c.s.engines ? 'NOT RUNNING' : c.fuel.eng1Suction ? 'SUCTION FEED' : c.fuel.leftSrc === 'ctr' ? 'FED FROM CENTER' : c.fuel.leftSrc === 'xfeed' ? 'VIA CROSSFEED' : 'FED FROM MAIN 1') },
     { id: 'apu', kind: 'source', label: 'APU', x: 420, y: 90, w: 160, h: 60, active: (c) => c.fuel.apuFeed, part: 'sys-fuel-apu', status: (c) => (c.s.apu ? 'RUNNING' : 'OFF') },
-    { id: 'eng2', kind: 'source', label: 'ENGINE 2', x: 770, y: 90, w: 170, h: 60, active: (c) => c.fuel.eng2Feed, part: 'sys-fuel-suction', status: (c) => (!c.s.engines ? 'NOT RUNNING' : c.fuel.eng2Suction ? 'SUCTION FEED' : c.fuel.rightSrc === 'ctr' ? 'FED FROM CENTER' : c.fuel.rightSrc === 'xfeed' ? 'VIA CROSSFEED' : 'FED FROM MAIN 2') },
+    { id: 'eng2', kind: 'source', label: 'ENGINE 2', x: 770, y: 90, w: 170, h: 60, active: (c) => c.fuel.eng2Feed, part: 'sys-fuel-suction', status: (c) => (c.s['fail.eng2'] ? 'FAILED' : !c.s.engines ? 'NOT RUNNING' : c.fuel.eng2Suction ? 'SUCTION FEED' : c.fuel.rightSrc === 'ctr' ? 'FED FROM CENTER' : c.fuel.rightSrc === 'xfeed' ? 'VIA CROSSFEED' : 'FED FROM MAIN 2') },
     { id: 'xfeed', kind: 'valve', label: 'CROSSFEED', x: 500, y: 260, orient: 'h', active: (c) => c.fuel.xfeed, part: 'sys-fuel-xfeed', control: { key: 'sw.fuel.xfeed', type: 'toggle' } },
     { id: 'tank1', kind: 'tank', label: 'MAIN TANK 1', sub: '3,900 kg', x: 60, y: 330, w: 250, h: 130, active: (c) => c.fuel.leftSrc === 'main1', part: 'sys-fuel-tanks' },
     { id: 'tankC', kind: 'tank', label: 'CENTER TANK', sub: '6,200 kg', x: 375, y: 330, w: 250, h: 130, active: (c) => c.fuel.leftSrc === 'ctr' || c.fuel.rightSrc === 'ctr', part: 'sys-fuel-center' },
@@ -178,12 +178,12 @@ const bleedAir = {
   id: 'bleed', category: 'sys-bleed', title: 'Bleed Air & Packs', color: 'bleed',
   intro: 'Engines and the APU supply hot compressed air for the packs (air conditioning and pressurization), wing anti-ice and engine starting. The isolation valve splits the duct into left and right sides.',
   nodes: [
-    { id: 'eng1', kind: 'source', label: 'ENGINE 1', x: 60, y: 50, w: 170, h: 60, active: (c) => c.s.engines, part: 'sys-bleed-engine', status: (c) => (c.s.engines ? 'RUNNING' : 'NOT RUNNING') },
+    { id: 'eng1', kind: 'source', label: 'ENGINE 1', x: 60, y: 50, w: 170, h: 60, active: (c) => c.eng.run1, part: 'sys-bleed-engine', status: (c) => (c.s['fail.eng1'] ? 'FAILED' : c.eng.run1 ? 'RUNNING' : 'NOT RUNNING') },
     { id: 'apu', kind: 'source', label: 'APU', x: 420, y: 50, w: 160, h: 60, active: (c) => c.s.apu, part: 'sys-bleed-apu', status: (c) => (c.bleed.apub ? 'BLEED ON' : c.s.apu ? 'RUNNING' : 'OFF') },
-    { id: 'eng2', kind: 'source', label: 'ENGINE 2', x: 770, y: 50, w: 170, h: 60, active: (c) => c.s.engines, part: 'sys-bleed-engine', status: (c) => (c.s.engines ? 'RUNNING' : 'NOT RUNNING') },
-    { id: 'b1', kind: 'valve', label: 'ENG 1 BLEED', x: 145, y: 170, orient: 'v', active: (c) => c.s['sw.bleed1'], part: 'sys-bleed-engine', control: { key: 'sw.bleed1', type: 'toggle' } },
+    { id: 'eng2', kind: 'source', label: 'ENGINE 2', x: 770, y: 50, w: 170, h: 60, active: (c) => c.eng.run2, part: 'sys-bleed-engine', status: (c) => (c.s['fail.eng2'] ? 'FAILED' : c.eng.run2 ? 'RUNNING' : 'NOT RUNNING') },
+    { id: 'b1', kind: 'valve', label: 'ENG 1 BLEED', x: 145, y: 170, orient: 'v', active: (c) => c.s['sw.bleed1'] && !c.s['fail.bleed1'], part: 'sys-bleed-engine', control: { key: 'sw.bleed1', type: 'toggle' }, status: (c) => (c.s['fail.bleed1'] ? 'TRIP OFF' : c.s['sw.bleed1'] ? 'ON' : 'OFF') },
     { id: 'ab', kind: 'valve', label: 'APU BLEED', x: 500, y: 170, orient: 'v', active: (c) => c.s['sw.apubleed'], part: 'sys-bleed-apu', control: { key: 'sw.apubleed', type: 'toggle' } },
-    { id: 'b2', kind: 'valve', label: 'ENG 2 BLEED', x: 855, y: 170, orient: 'v', active: (c) => c.s['sw.bleed2'], part: 'sys-bleed-engine', control: { key: 'sw.bleed2', type: 'toggle' } },
+    { id: 'b2', kind: 'valve', label: 'ENG 2 BLEED', x: 855, y: 170, orient: 'v', active: (c) => c.s['sw.bleed2'] && !c.s['fail.bleed2'], part: 'sys-bleed-engine', control: { key: 'sw.bleed2', type: 'toggle' }, status: (c) => (c.s['fail.bleed2'] ? 'TRIP OFF' : c.s['sw.bleed2'] ? 'ON' : 'OFF') },
     { id: 'iso', kind: 'valve', label: 'ISOLATION', x: 500, y: 270, orient: 'h', active: (c) => c.bleed.isoOpen, part: 'sys-bleed-iso', control: { key: 'sw.iso', type: 'cycle', values: ['AUTO', 'OPEN', 'CLOSE'] }, status: (c) => c.s['sw.iso'] },
     { id: 'packL', kind: 'box', label: 'LEFT PACK', x: 80, y: 360, w: 170, h: 50, active: (c) => c.bleed.packL, part: 'sys-bleed-packs', control: { key: 'sw.pack.l', type: 'toggle', on: 'AUTO', off: 'OFF' } },
     { id: 'wai', kind: 'box', label: 'WING ANTI-ICE', x: 415, y: 360, w: 170, h: 50, active: (c) => c.bleed.wingAI, part: 'sys-bleed-wingai', control: { key: 'sw.wingai', type: 'toggle', on: 'ON', off: 'OFF' } },

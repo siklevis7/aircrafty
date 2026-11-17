@@ -71,6 +71,7 @@ export function createSchematicView(root, { schematics, scenario = [], systems, 
         el('rect', { x: n.x, y: n.y, width: n.w, height: n.h, rx: 10, class: 'shape' }, g);
         parts.label = el('text', { x: n.x + 12, y: n.y + 20, class: 'lbl' }, g);
         if (n.sub) { const t = el('text', { x: n.x + n.w - 12, y: n.y + 20, class: 'sub end' }, g); t.textContent = n.sub; }
+        if (n.status) parts.status = el('text', { x: n.x + 12, y: n.y + n.h - 8, class: 'st st-alert' }, g);
       } else if (n.kind === 'pump') {
         const r = n.r || 30;
         el('circle', { cx: n.x, cy: n.y, r, class: 'shape' }, g);

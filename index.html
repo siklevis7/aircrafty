@@ -29,8 +29,7 @@
         <button class="mode" type="button" data-mode="walkaround">Walkaround</button>
         <button class="mode" type="button" data-mode="flightdeck">Flight deck</button>
         <button class="mode" type="button" data-mode="systems">Systems</button>
-        <button class="mode" type="button" data-mode="quiz">Quiz</button>
-        <button class="mode" type="button" disabled>Failures <i>soon</i></button>
+        <button class="mode" type="button" data-mode="failures">Failures</button>
       </nav>
       <div class="top-actions">
         <label class="ac-select">
@@ -62,7 +61,7 @@
       <nav class="index" id="index" aria-label="Component index"></nav>
       <dl class="specs" id="specs"></dl>
       <div class="walk" id="walk" hidden></div>
-      <div class="walk quiz" id="quiz" hidden></div>
+      <div class="walk fail" id="fail" hidden></div>
     </aside>
 
     <main class="stage" id="stage">
@@ -98,7 +97,6 @@
       <dt>I</dt><dd>Isolate the selected part</dd>
       <dt>← →</dt><dd>Walkaround: previous / next stop</dd>
       <dt>N</dt><dd>Flight deck: day / night lighting</dd>
-      <dt>1–4 · Enter</dt><dd>Quiz: pick an answer · next question</dd>
       <dt>Shift+click</dt><dd>Flight deck: move a lever back one position</dd>
       <dt>[ ]</dt><dd>Flap lever up / down one detent</dd>
       <dt>G</dt><dd>Gear lever UP / DN</dd>
