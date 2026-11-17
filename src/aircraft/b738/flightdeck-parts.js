@@ -1,0 +1,305 @@
+// 737-800 (NG) flight deck zones. Same shape as exterior parts so the UI can reuse them.
+// Layout follows Boeing's panel numbering (P1/P2/P3 main panels, P5 overhead, P7 glareshield,
+// P8 aft electronic, P9 forward electronic, control stand). Generic study descriptions:
+// operator documents take precedence.
+
+export const fdCategories = [
+  { id: 'fd-overhead', label: 'Forward Overhead (P5)' },
+  { id: 'fd-aft-overhead', label: 'Aft Overhead (P5)' },
+  { id: 'fd-glareshield', label: 'Glareshield (P7)' },
+  { id: 'fd-main', label: 'Main Panels (P1 · P2 · P3)' },
+  { id: 'fd-pedestal', label: 'Pedestal & Control Stand' },
+  { id: 'fd-cabin', label: 'Flight Controls & Cockpit' },
+];
+
+const toggle = (key, label = 'Toggle') => ({ label, toggle: key });
+
+export const fdParts = [
+  // ---------------------------------------------------------------- Forward overhead
+  {
+    id: 'fd-flight-controls', category: 'fd-overhead', name: 'Flight Control Panel', where: 'Forward overhead · top left',
+    what: 'Switches for the hydraulic supply to the flight controls, the spoilers, alternate flaps and the yaw damper.',
+    how: 'FLT CONTROL A and B (guarded): ON, OFF, or STBY RUD, which selects the standby rudder. SPOILER A and B shut off hydraulic power to the flight spoilers. The ALTERNATE FLAPS master switch arms the electric flap drive, and the ALTERNATE FLAPS position switch drives it up or down. YAW DAMPER switch with its amber yaw damper light.',
+    notes: ['LOW PRESSURE lights show hydraulic loss to each flight control system.', 'Alternate flaps extend the leading-edge devices fully, using the standby hydraulic system.'],
+    view: [-0.3, -1, 0.2],
+  },
+  {
+    id: 'fd-nav-displays', category: 'fd-overhead', name: 'Navigation & Display Source', where: 'Forward overhead · left',
+    what: 'Transfer switches that let one side\'s navigation or display source feed both pilots\' displays after a failure.',
+    how: 'VHF NAV, IRS, FMC, DISPLAYS SOURCE and CONTROL PANEL selectors. Normal is the center position, with each side using its own equipment. BOTH ON 1 or BOTH ON 2 feeds both sides from one source.',
+    notes: ['Typically used only in non-normal procedures.'],
+    view: [-0.3, -1, 0.2],
+  },
+  {
+    id: 'fd-fuel', category: 'fd-overhead', name: 'Fuel Panel', where: 'Forward overhead · lower left',
+    what: 'Controls the six fuel boost pumps and the crossfeed valve, and shows fuel temperature.',
+    how: 'Two pumps per tank: tanks 1 and 2 (AFT and FWD) and the center tank (L and R). The CROSSFEED selector opens the crossfeed valve to balance fuel. LOW PRESSURE lights show a pump problem. VALVE OPEN lights show the engine and spar valve positions.',
+    notes: ['Use center tank fuel first, then the main tanks.', 'FUEL TEMP gauge reads tank 1 fuel temperature.'],
+    tryIt: [],
+    view: [-0.3, -1, 0.2],
+  },
+  {
+    id: 'fd-electrical', category: 'fd-overhead', name: 'Electrical Panel', where: 'Forward overhead · second column',
+    what: 'Battery, standby power, ground power, the generators and bus transfer.',
+    how: 'DC and AC meters with selectors. BATTERY switch (guarded). STANDBY POWER switch (guarded): BAT, OFF, AUTO. GRD POWER switch. GEN 1, APU GEN and GEN 2 switches connect generators to the transfer buses. TRANSFER BUS OFF, SOURCE OFF and GEN OFF BUS lights. BUS TRANSFER switch (AUTO normally). Drive DISCONNECT switches for each IDG.',
+    notes: ['IDG disconnect can\'t be reset in flight.', 'A blue GRD POWER AVAILABLE light means external power is connected.'],
+    view: [-0.3, -1, 0.1],
+  },
+  {
+    id: 'fd-apu', category: 'fd-overhead', name: 'APU Controls', where: 'Forward overhead · second column',
+    what: 'Starts and stops the APU and shows its status.',
+    how: 'APU switch: OFF, ON, START (spring-loaded back to ON). APU EGT indicator. Lights: MAINT, LOW OIL PRESSURE, FAULT, OVERSPEED. The blue APU GEN OFF BUS light means the APU is ready to power the buses.',
+    notes: ['After shutdown the APU runs on for a cooling period before stopping.'],
+    tryIt: [{ label: 'Start APU', set: { apu: true } }, { label: 'APU off', set: { apu: false } }],
+    view: [-0.3, -1, 0.1],
+  },
+  {
+    id: 'fd-cabin-signs', category: 'fd-overhead', name: 'Cabin Signs & Emergency Lights', where: 'Forward overhead · center',
+    what: 'Passenger signs, emergency exit lights, crew call and equipment cooling.',
+    how: 'EMERGENCY EXIT LIGHTS (guarded): OFF, ARMED, ON. NO SMOKING / CHIME and FASTEN BELTS switches (OFF, AUTO, ON). ATTEND and GRD CALL buttons. EQUIP COOLING SUPPLY and EXHAUST fans (NORMAL or ALTN).',
+    notes: ['Emergency exit lights are ARMED for flight. The amber NOT ARMED light shows otherwise.'],
+    view: [-0.3, -1, 0],
+  },
+  {
+    id: 'fd-window-probe-heat', category: 'fd-overhead', name: 'Window & Probe Heat', where: 'Forward overhead · center',
+    what: 'Heats the flight deck windows and the air data probes.',
+    how: 'WINDOW HEAT switches for the left and right side and forward windows, with ON and OVERHEAT lights and a test switch. PROBE HEAT A and B heat the pitot probes, AOA vanes and TAT probe. Amber lights show a heater fault.',
+    notes: ['Probe heat is normally ON before takeoff.', 'Window heat goes ON at least 10 minutes before takeoff.'],
+    view: [-0.3, -1, 0],
+  },
+  {
+    id: 'fd-anti-ice', category: 'fd-overhead', name: 'Anti-Ice Panel', where: 'Forward overhead · third column',
+    what: 'Wing and engine anti-ice.',
+    how: 'WING ANTI-ICE switch opens the valves sending bleed air to the three inboard slats on each wing. ENG ANTI-ICE switches heat each engine cowl inlet. Blue VALVE OPEN lights confirm the valves are open. Amber COWL ANTI-ICE lights show overpressure.',
+    notes: ['Engine anti-ice must be ON in icing conditions on the ground and in flight.', 'Wing anti-ice on the ground is limited and should be used per your operator\'s procedures.'],
+    view: [-0.3, -1, -0.05],
+  },
+  {
+    id: 'fd-hydraulics', category: 'fd-overhead', name: 'Hydraulic Pumps', where: 'Forward overhead · third column',
+    what: 'The four main hydraulic pumps.',
+    how: 'From left to right: ELEC 2 (system A electric pump), ENG 1 (system A engine-driven pump), ENG 2 (system B engine-driven pump), ELEC 1 (system B electric pump). Amber LOW PRESSURE and OVERHEAT lights.',
+    notes: ['The electric pumps are crossed: generator 2 powers system A\'s electric pump and generator 1 powers system B\'s.', 'The engine-driven pumps are normally left ON.'],
+    view: [-0.3, -1, -0.05],
+  },
+  {
+    id: 'fd-air-conditioning', category: 'fd-overhead', name: 'Air Conditioning', where: 'Forward overhead · right column',
+    what: 'Cabin and flight deck temperature control.',
+    how: 'Temperature selectors for the flight deck and the cabin zones, a duct/cabin temperature indicator, and RECIRC FAN switches. Amber lights show zone temperature and duct overheat faults.',
+    notes: [],
+    view: [-0.3, -1, -0.15],
+  },
+  {
+    id: 'fd-bleed-air', category: 'fd-overhead', name: 'Bleed Air Panel', where: 'Forward overhead · right column',
+    what: 'Controls the air supply for pressurization, air conditioning, engine start and anti-ice.',
+    how: 'Dual duct pressure gauge (left and right). PACK switches (OFF, AUTO, HIGH). ISOLATION VALVE (CLOSE, AUTO, OPEN). ENGINE BLEED 1 and 2 switches, APU BLEED switch. Lights: DUAL BLEED, PACK, BLEED TRIP OFF, WING-BODY OVERHEAT.',
+    notes: ['DUAL BLEED shows the APU bleed valve is open together with an engine bleed. Keep thrust low.'],
+    view: [-0.3, -1, -0.15],
+  },
+  {
+    id: 'fd-pressurization', category: 'fd-overhead', name: 'Pressurization Panel', where: 'Forward overhead · lower right',
+    what: 'Sets how the cabin is pressurized.',
+    how: 'FLT ALT and LAND ALT selectors feed the pressure controller. The mode selector chooses AUTO, ALTN or MAN. In MAN, a toggle drives the outflow valve open or closed, and a gauge shows the valve position. Cabin altitude and differential pressure indicators sit nearby.',
+    notes: ['Set FLT ALT to the planned cruise level and LAND ALT to the destination field elevation before departure.'],
+    view: [-0.3, -1, -0.15],
+  },
+  {
+    id: 'fd-exterior-lights', category: 'fd-overhead', name: 'Exterior Lights', where: 'Forward overhead · bottom row',
+    what: 'Landing, runway turnoff, taxi, logo, position, anti-collision, wing and wheel well lights.',
+    how: 'Switches along the bottom of the forward overhead. These are linked to the 3D aircraft: switching them here lights it up in the Exterior view.',
+    notes: ['POSITION is a three-way switch: STROBE & STEADY, OFF, STEADY.'],
+    tryIt: [toggle('light.landing', 'Landing'), toggle('light.turnoff', 'Turnoff'), toggle('light.taxi', 'Taxi'), toggle('light.logo', 'Logo'), toggle('light.strobe', 'Strobe'), toggle('light.beacon', 'Anti-coll'), toggle('light.wing', 'Wing')],
+    view: [-0.2, -1, 0],
+  },
+  {
+    id: 'fd-engine-start', category: 'fd-overhead', name: 'Engine Start Panel', where: 'Forward overhead · bottom row, center',
+    what: 'Engine start switches and ignition selection.',
+    how: 'One switch per engine: GRD (starts the engine, held by a solenoid until starter cutout), OFF, CONT (continuous ignition), FLT (both igniters for an in-flight start). IGNITION SELECT chooses IGN L, IGN R or BOTH.',
+    notes: ['The start switch releases from GRD at starter cutout, around 55–56% N2.', 'Use CONT for takeoff and landing in some conditions (per operator).'],
+    view: [-0.2, -1, 0],
+  },
+
+  // ---------------------------------------------------------------- Aft overhead
+  {
+    id: 'fd-irs', category: 'fd-aft-overhead', name: 'IRS Mode Select Unit', where: 'Aft overhead',
+    what: 'Selects the mode for the two inertial reference systems (IRS).',
+    how: 'One selector per IRS: OFF, ALIGN, NAV, ATT. Lights: ALIGN, ON DC, FAULT, DC FAIL. Each IRS aligns on the ground (normally in NAV) using the position entered in the FMC.',
+    notes: ['Full alignment takes about 10 minutes, longer at high latitudes.', 'Don\'t move the aircraft during alignment.'],
+    view: [0.4, -1, 0.1],
+  },
+  {
+    id: 'fd-le-devices', category: 'fd-aft-overhead', name: 'LE Devices Annunciator', where: 'Aft overhead',
+    what: 'One light for every leading-edge slat and Krueger flap.',
+    how: 'Each device shows TRANSIT (amber), EXT (green) or FULL EXT (green). It\'s used to check individual devices, while the center panel LE FLAPS lights give the overall status.',
+    notes: ['A good walkaround and before-takeoff cross-check with the flap indicator.'],
+    view: [0.4, -1, 0.1],
+  },
+  {
+    id: 'fd-engine-eec', category: 'fd-aft-overhead', name: 'Engine Panel (EEC)', where: 'Aft overhead',
+    what: 'Controls for the engine electronic controls (EEC) and engine indications.',
+    how: 'EEC switches select normal or alternate mode for each engine. Lights include REVERSER (a reverser fault), ENGINE CONTROL (an EEC fault) and ALTN (EEC in alternate mode).',
+    notes: ['In alternate mode, the EEC can give more thrust than the normal rating at the same thrust lever position.'],
+    view: [0.4, -1, 0.1],
+  },
+
+  // ---------------------------------------------------------------- Glareshield
+  {
+    id: 'fd-mcp', category: 'fd-glareshield', name: 'Mode Control Panel (MCP)', where: 'Glareshield · center',
+    what: 'The main interface to the autopilot, flight directors and autothrottle.',
+    how: 'Course selectors, F/D switches, A/T ARM, and modes: N1, SPEED, LVL CHG, VNAV, HDG SEL, LNAV, VOR LOC, APP, ALT HOLD, V/S. Windows set IAS/MACH, heading, altitude and vertical speed. Autopilot engage buttons CMD A, CMD B and CWS A/B, plus the disengage bar.',
+    notes: ['Active modes appear in the flight mode annunciations at the top of each PFD.', 'Two autopilots engaged together (CMD A + B) only for an autoland approach.'],
+    view: [-1, 0.2, 0],
+  },
+  {
+    id: 'fd-efis-panels', category: 'fd-glareshield', name: 'EFIS Control Panels', where: 'Glareshield · either side of the MCP',
+    what: 'Each pilot\'s controls for their own PFD and ND.',
+    how: 'Minimums selector (RADIO or BARO), barometric setting (with STD), flight path vector, meters, ND mode (APP, VOR, MAP, PLN), range, and map overlays (WXR, STA, WPT, ARPT, DATA, POS, TERR).',
+    notes: [],
+    view: [-1, 0.25, 0.15],
+  },
+  {
+    id: 'fd-master-caution', category: 'fd-glareshield', name: 'Fire Warning & Master Caution', where: 'Glareshield · outboard',
+    what: 'The attention-getters. FIRE WARN (red) and MASTER CAUTION (amber) on each side, with the system annunciator panels.',
+    how: 'Pressing FIRE WARN silences the fire bell. Pressing MASTER CAUTION resets it and shows which system the six-pack annunciator has flagged (for example FLT CONT, ELEC, FUEL, HYD, ENG, OVHT/DET, ANTI-ICE, DOORS). Pressing an annunciator panel recalls all current cautions.',
+    notes: [],
+    view: [-1, 0.25, 0.3],
+  },
+
+  // ---------------------------------------------------------------- Main panels
+  {
+    id: 'fd-pfd', category: 'fd-main', name: 'Primary Flight Display (PFD)', where: 'Captain and F/O outboard displays',
+    what: 'The primary flight instrument: attitude, airspeed, altitude, vertical speed and heading, plus flight mode annunciations and approach guidance.',
+    how: 'Speed tape on the left with bugs and limits, altitude tape on the right, attitude indicator in the middle, heading at the bottom. The flight mode annunciations across the top show the autothrottle, roll and pitch modes, and the autopilot status.',
+    notes: ['On the NG the six display units are interchangeable, and display selectors reconfigure them after a failure.'],
+    view: [-1, 0.1, 0.1],
+  },
+  {
+    id: 'fd-nd', category: 'fd-main', name: 'Navigation Display (ND)', where: 'Captain and F/O inboard displays',
+    what: 'Map of the route, navaids, weather radar, terrain and traffic.',
+    how: 'Mode and range are set on the EFIS panel. MAP mode shows the FMC route in magenta with the aircraft symbol, and PLN mode shows a north-up plan view.',
+    notes: [],
+    view: [-1, 0.1, 0.05],
+  },
+  {
+    id: 'fd-upper-du', category: 'fd-main', name: 'Upper Display (Engines)', where: 'Center panel (P2)',
+    what: 'Primary engine indications: N1, EGT, fuel flow and fuel quantity, plus the REV and START VALVE indications.',
+    how: 'N1 and EGT dials for each engine, with thrust reference and limits. Secondary indications (N2, oil, vibration) appear on the lower display when selected or needed.',
+    notes: [],
+    view: [-1, 0.1, 0],
+  },
+  {
+    id: 'fd-lower-du', category: 'fd-pedestal', name: 'Lower Display Unit', where: 'Forward electronic panel (P9), between the CDUs',
+    what: 'Shows secondary engine indications (N2, fuel flow, oil, vibration) or system pages such as hydraulics.',
+    how: 'Pages are selected with the display select panel buttons (for example ENG and SYS). It can take over another display unit if one fails.',
+    notes: [],
+    view: [-0.6, 0.9, 0],
+  },
+  {
+    id: 'fd-standby', category: 'fd-main', name: 'Standby Flight Instruments', where: 'Center panel (P2), left side',
+    what: 'Standby attitude, airspeed and altitude, independent of the main displays.',
+    how: 'Most NGs have an integrated standby flight display (ISFD), fed by the auxiliary pitot and alternate static sources. Older airframes have separate standby instruments. A standby magnetic compass sits up by the windshield.',
+    notes: [],
+    view: [-1, 0.1, 0.05],
+  },
+  {
+    id: 'fd-gear-panel', category: 'fd-main', name: 'Landing Gear Lever & Indicators', where: 'Center panel (P2), right side',
+    what: 'Gear lever (UP, OFF, DN), the three green and red gear lights, the flap position indicator, LE FLAPS lights and the autobrake selector.',
+    how: 'These controls are linked to the 3D aircraft. Moving the lever here retracts or extends the gear, with the same ground lock logic. The autobrake selector is set to RTO for takeoff and 1, 2, 3 or MAX for landing.',
+    notes: ['Red light: gear in transit or disagreeing with the lever. Green: down and locked.', 'The gear lever lock prevents UP on the ground, and an override trigger releases it.'],
+    tryIt: [{ label: 'Gear UP (in flight)', set: { onGround: false, gearLever: 'UP' } }, { label: 'Gear OFF', set: { gearLever: 'OFF' } }, { label: 'Gear DN', set: { gearLever: 'DN' } }],
+    view: [-1, 0.1, -0.1],
+  },
+
+  // ---------------------------------------------------------------- Pedestal
+  {
+    id: 'fd-cdu', category: 'fd-pedestal', name: 'FMC Control Display Units (CDU)', where: 'Forward electronic panel (P9)',
+    what: 'The keyboards and screens for the flight management computer: route, performance and navigation data.',
+    how: 'The preflight sequence typically runs IDENT, POS INIT, RTE, DEP/ARR, PERF INIT, N1 LIMIT and TAKEOFF REF. Line select keys pick each data field, and the scratchpad sits at the bottom.',
+    notes: ['The lower display unit sits between the two CDUs.'],
+    view: [-0.6, 0.9, 0],
+  },
+  {
+    id: 'fd-thrust-levers', category: 'fd-pedestal', name: 'Thrust Levers', where: 'Control stand',
+    what: 'Forward thrust levers, with reverse thrust levers piggybacked on top. TO/GA switches and autothrottle disconnect buttons are on the levers.',
+    how: 'The reverse levers can only be raised with the forward levers at idle, and the reversers only deploy on the ground. With the autothrottle engaged, the levers move by themselves.',
+    notes: ['Linked to the model: raising reverse here deploys the reversers on the 3D engines.'],
+    tryIt: [{ label: 'Reverse (on ground)', set: { onGround: true, gearLever: 'DN', reversers: true } }, { label: 'Stow', set: { reversers: false } }],
+    view: [-0.5, 0.85, 0.1],
+  },
+  {
+    id: 'fd-speedbrake-lever', category: 'fd-pedestal', name: 'Speed Brake Lever', where: 'Control stand · left',
+    what: 'Commands the spoilers: DOWN, ARMED, FLIGHT DETENT, UP.',
+    how: 'ARMED sets up automatic deployment on touchdown. In flight the flight spoilers rise in proportion to lever travel. Linked to the 3D wing.',
+    notes: [],
+    tryIt: [{ label: 'ARMED', set: { speedbrake: 'ARMED' } }, { label: 'Flight detent', set: { onGround: false, gearLever: 'UP', speedbrake: 'FLIGHT' } }, { label: 'DOWN', set: { speedbrake: 'DOWN' } }],
+    view: [-0.5, 0.85, 0.3],
+  },
+  {
+    id: 'fd-flap-lever', category: 'fd-pedestal', name: 'Flap Lever', where: 'Control stand · right',
+    what: 'Selects UP, 1, 2, 5, 10, 15, 25, 30, 40, with gates at 1 and 15 to prevent overshooting the go-around settings.',
+    how: 'Linked to the 3D wing: the trailing-edge flaps and leading-edge devices follow the lever, and the flap indicator on the center panel shows the position.',
+    notes: ['The gate at 15 stops inadvertent retraction past the normal go-around flap setting.'],
+    tryIt: [{ label: 'Flaps 1', set: { flapLever: 1 } }, { label: 'Flaps 5', set: { flapLever: 5 } }, { label: 'Flaps 15', set: { flapLever: 15 } }, { label: 'Flaps 30', set: { flapLever: 30 } }, { label: 'Flaps up', set: { flapLever: 0 } }],
+    view: [-0.5, 0.85, -0.3],
+  },
+  {
+    id: 'fd-stab-trim', category: 'fd-pedestal', name: 'Stabilizer Trim Wheels', where: 'Control stand · both sides',
+    what: 'Manual stabilizer trim wheels with the trim indicator and its green takeoff band.',
+    how: 'The wheels spin whenever the stabilizer moves electrically. Flight crews can always trim manually by turning the wheels, and the fold-out handles help. STAB TRIM cutout switches sit aft on the control stand.',
+    notes: ['Linked to the model: trimming here moves the 3D stabilizer.'],
+    tryIt: [{ label: 'Takeoff trim 5', set: { stabTrim: 5 } }, { label: 'Nose up', set: { stabTrim: 10 } }, { label: 'Nose down', set: { stabTrim: 2 } }],
+    view: [-0.4, 0.8, 0.6],
+  },
+  {
+    id: 'fd-start-levers', category: 'fd-pedestal', name: 'Engine Start Levers', where: 'Control stand · aft of the thrust levers',
+    what: 'IDLE and CUTOFF. They control fuel to each engine and power to the ignition.',
+    how: 'During the start, the lever goes to IDLE at the specified N2 to introduce fuel. CUTOFF shuts the engine down. The parking brake lever is nearby on the left.',
+    notes: ['Engine fire and severe damage procedures begin with the affected engine\'s start lever.'],
+    view: [-0.4, 0.9, 0.1],
+  },
+  {
+    id: 'fd-fire-panel', category: 'fd-pedestal', name: 'Fire Protection Panel', where: 'Aft electronic panel (P8)',
+    what: 'Engine and APU fire switches, the detection test, and cargo fire controls.',
+    how: 'Each engine and APU fire switch is locked until a fire warning, or is mechanically overridden. Pulling it arms the extinguisher and closes the fuel, bleed and hydraulic shutoff valves and trips the generator. Rotating it fires a bottle. Loop selectors and TEST switches cover the fire and overheat detection loops.',
+    notes: ['The engine fire switch is a memory item in many QRHs. Follow your QRH.'],
+    view: [-0.2, 1, 0],
+  },
+  {
+    id: 'fd-radios', category: 'fd-pedestal', name: 'Radio & Audio Panels', where: 'Aft electronic panel (P8)',
+    what: 'VHF comm and nav radios, ADF, transponder/TCAS, weather radar and each pilot\'s audio control panel.',
+    how: 'Radio tuning panels (active and standby frequencies), the transponder mode selector (STBY, ALT RPTG OFF, XPNDR, TA ONLY, TA/RA) and the audio control panels for microphone and receiver selection.',
+    notes: [],
+    view: [-0.2, 1, 0.1],
+  },
+  {
+    id: 'fd-trim-panel', category: 'fd-pedestal', name: 'Rudder & Aileron Trim', where: 'Aft electronic panel (P8)',
+    what: 'Rudder trim knob with its indicator, and the aileron trim switches.',
+    how: 'Both aileron trim switches must be moved together to trim, to prevent inadvertent operation. Rudder trim is used for asymmetric thrust, for example an engine failure.',
+    notes: ['Don\'t use aileron trim with the autopilot engaged.'],
+    view: [-0.2, 1, 0.15],
+  },
+
+  // ---------------------------------------------------------------- Controls & cockpit
+  {
+    id: 'fd-control-column', category: 'fd-cabin', name: 'Control Columns & Wheels', where: 'Captain and F/O',
+    what: 'Pitch (column) and roll (wheel) control. The two columns are mechanically linked.',
+    how: 'They drive the elevator and aileron PCUs through cables. Each wheel has the electric stab trim switches, the autopilot disconnect, and a mic switch. The stick shaker vibrates the column at the approach to a stall.',
+    notes: ['Linked to the model: try the roll and pitch buttons.'],
+    tryIt: [{ label: 'Roll left', set: { roll: -0.7 } }, { label: 'Roll right', set: { roll: 0.7 } }, { label: 'Pull', set: { pitch: 0.7 } }, { label: 'Center', set: { roll: 0, pitch: 0 } }],
+    view: [-0.6, 0.4, 0.4],
+  },
+  {
+    id: 'fd-rudder-pedals', category: 'fd-cabin', name: 'Rudder Pedals & Brakes', where: 'Captain and F/O footwells',
+    what: 'Pedals move the rudder and steer the nose wheel up to about 7°. Pressing the tops applies the wheel brakes.',
+    how: 'Rudder through the main rudder PCU (systems A and B) or the standby PCU. Toe brakes use system B normally and system A as the alternate.',
+    notes: [],
+    tryIt: [{ label: 'Left rudder', set: { yaw: -0.7 } }, { label: 'Right rudder', set: { yaw: 0.7 } }, { label: 'Center', set: { yaw: 0 } }],
+    view: [-0.6, 0.6, 0.3],
+  },
+  {
+    id: 'fd-tiller', category: 'fd-cabin', name: 'Nose Wheel Steering Tiller', where: 'Captain\'s side wall (some airframes also on the F/O side)',
+    what: 'Steers the nose wheel up to about 78° either side for taxiing and tight turns.',
+    how: 'Hydraulic system A (alternate system B with the NOSE WHEEL STEERING switch). The tiller overrides rudder pedal steering.',
+    notes: [],
+    view: [0, 0.4, 1],
+  },
+];

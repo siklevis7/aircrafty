@@ -147,7 +147,7 @@ export function createWalkaround(root, { data, parts, aircraftId, viewer, onOpen
     stop() {
       active = false;
       root.hidden = true;
-      viewer.setFov(38);
+      viewer.setFov(viewer.baseFov ?? 38);
       viewer.clearRoute();
       viewer.setHighlightSet([]);
     },

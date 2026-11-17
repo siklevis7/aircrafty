@@ -28,6 +28,9 @@ $('#theme-toggle').addEventListener('click', () => {
 });
 systemDark.addEventListener('change', applySceneTheme);
 
+const MODE_HASH = { explore: '', walkaround: '#walkaround', flightdeck: '#flightdeck' };
+const modeFromHash = () => (location.hash === '#walkaround' ? 'walkaround' : location.hash === '#flightdeck' ? 'flightdeck' : 'explore');
+
 // ---------------------------------------------------------------- boot
 async function boot() {
   if (window.innerWidth <= 820) document.body.classList.add('sidebar-collapsed');
@@ -40,66 +43,119 @@ async function boot() {
   select.value = getAircraft(acId).id;
 
   const ac = await getAircraft(acId).load();
-  const progress = createProgress(ac.meta.id);
-  const { parts, categories } = ac;
-
-  $('#ac-family').textContent = ac.meta.family;
   $('#ac-name').textContent = ac.meta.name;
   $('#specs').innerHTML = ac.meta.specs.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
 
+  viewer = new Viewer($('#stage'), { onSelect: (id) => select3d(id) });
+  const { root, systems } = ac.build();
+
+  // Each dataset is a 3D scene plus its own clickable parts, categories, progress and camera views.
+  const datasets = {
+    exterior: {
+      key: 'exterior', root, parts: ac.parts, categories: ac.categories, camera: ac.camera,
+      progress: createProgress(ac.meta.id), family: ac.meta.family,
+    },
+  };
+  let deck = null;
+  if (ac.flightDeck) {
+    deck = ac.flightDeck.build(systems);
+    datasets.flightdeck = {
+      key: 'flightdeck', root: deck.root, parts: ac.flightDeck.parts, categories: ac.flightDeck.categories,
+      camera: ac.flightDeck.camera, progress: createProgress(`${ac.meta.id}-flightdeck`), family: 'Flight deck',
+    };
+  }
+
+  let ds = null;
   let selected = null;
   let mode = 'explore';
-  const select3d = (id, opts = {}) => {
+  let index = null;
+  let panel = null;
+
+  function select3d(id, opts = {}) {
     selected = id;
     viewer.select(id, opts);
-    index.setSelected(id);
+    index?.setSelected(id);
     if (id) {
       panel.show(id);
-      if (progress.add(id)) { index.refresh(); updateProgress(); }
-    } else panel.hide();
+      if (ds.progress.add(id)) { index.refresh(); updateProgress(); }
+    } else panel?.hide();
     document.body.classList.toggle('has-selection', !!id);
     updateInsets();
-  };
-  const updateInsets = () => {
+  }
+  function updateInsets() {
     const wide = window.innerWidth > 820;
     const right = selected && wide ? $('#info').offsetWidth + 32 : 0;
     const bottom = $('#dock').offsetHeight * 0.85;
     viewer?.setInsets({ right, bottom });
-  };
+  }
   window.addEventListener('resize', updateInsets);
 
-  viewer = new Viewer($('#stage'), { onSelect: (id) => select3d(id) });
-  const { root, systems } = ac.build();
-  viewer.load(root, parts, ac.camera);
+  const onTry = (t) => {
+    const r = t.toggle ? systems.set(t.toggle, !systems.get(t.toggle)) : systems.apply(t.set);
+    if (!r.ok) toast(r.message, 'warn');
+  };
+
+  function updateProgress() {
+    const n = ds.progress.count(), total = ds.parts.length;
+    $('#progress-count').textContent = n;
+    $('#progress-total').textContent = total;
+    $('#progress-bar').style.width = `${(n / total) * 100}%`;
+  }
+
+  function renderViews() {
+    const names = Object.keys(ds.camera.views);
+    $('#views').innerHTML = names.map((n, i) => `<button class="vt-btn" type="button" data-view="${n}" title="${n} (${i + 1})">${n}</button>`).join('');
+  }
+  $('#views').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-view]');
+    if (b) viewer.setView(ds.camera.views[b.dataset.view]);
+  });
+
+  function useDataset(key, { fly = true } = {}) {
+    if (ds?.key === key) return;
+    select3d(null);
+    ds = datasets[key];
+    viewer.load(ds.root, ds.parts, ds.camera);
+    index = createIndex($('#index'), {
+      categories: ds.categories, parts: ds.parts, progress: ds.progress,
+      onSelect: (id) => select3d(id),
+      onFilter: (fn) => { if (mode !== 'walkaround') viewer.setMarkerFilter(fn); },
+    });
+    panel = createPanel($('#info'), {
+      categories: ds.categories, parts: ds.parts, onTry,
+      onClose: () => select3d(null),
+      onSelect: (id) => select3d(id),
+      getToggle: (k) => systems.get(k),
+    });
+    $('#search').value = '';
+    $('#ac-family').textContent = ds.family;
+    updateProgress();
+    renderViews();
+    if (fly) {
+      const V = viewer.camera.position.constructor;
+      if (key === 'flightdeck') {
+        viewer.camera.position.set(...ds.camera.home.position);
+        viewer.controls.target.set(...ds.camera.home.target);
+      } else viewer.flyTo(new V(...ds.camera.home.position), new V(...ds.camera.home.target), 1.4);
+    }
+  }
+
+  useDataset('exterior', { fly: false });
   applySceneTheme();
 
-  const index = createIndex($('#index'), {
-    categories, parts, progress,
-    onSelect: (id) => select3d(id),
-    onFilter: (fn) => { if (mode !== 'walkaround') viewer.setMarkerFilter(fn); },
-  });
-  const panel = createPanel($('#info'), {
-    categories, parts,
-    onClose: () => select3d(null),
-    onSelect: (id) => select3d(id),
-    onTry: (t) => {
-      const r = t.toggle ? systems.set(t.toggle, !systems.get(t.toggle)) : systems.apply(t.set);
-      if (!r.ok) toast(r.message, 'warn');
-    },
-    getToggle: (k) => systems.get(k),
-  });
   const dock = createDock($('#dock'), { schema: ac.controlPanel, systems });
   $('#dock .dock-handle').addEventListener('click', () => setTimeout(updateInsets, 380));
   updateInsets();
-  viewer.addTicker((dt) => { systems.update(dt); dock.tick(); });
-  if (import.meta.env.DEV) window.__aircrafty = { viewer, systems, select: select3d };
+  viewer.addTicker((dt) => { systems.update(dt); deck?.update(dt); dock.tick(); });
+  if (import.meta.env.DEV) window.__aircrafty = { viewer, systems, select: (id) => select3d(id), datasets };
 
   // ---------------------------------------------------------------- modes
   const walk = ac.walkaround
-    ? createWalkaround($('#walk'), { data: ac.walkaround, parts, aircraftId: ac.meta.id, viewer, onOpenPart: (id) => select3d(id, { focus: false }) })
+    ? createWalkaround($('#walk'), { data: ac.walkaround, parts: ac.parts, aircraftId: ac.meta.id, viewer, onOpenPart: (id) => select3d(id, { focus: false }) })
     : null;
   const modeButtons = document.querySelectorAll('.mode[data-mode]');
   if (!walk) document.querySelector('.mode[data-mode="walkaround"]')?.setAttribute('disabled', '');
+  if (!deck) document.querySelector('.mode[data-mode="flightdeck"]')?.setAttribute('disabled', '');
 
   function parkForWalkaround() {
     // A walkaround happens on the ground with the aircraft parked and configured normally.
@@ -113,9 +169,16 @@ async function boot() {
     land();
   }
 
-  function setMode(next, { fromHash = false } = {}) {
-    if (next === 'walkaround' && !walk) next = 'explore';
-    if (next === mode && !fromHash) return;
+  const HINTS = {
+    explore: 'Click any part · drag to orbit · scroll to zoom',
+    walkaround: 'Follow the numbered route · ← → to move between stops',
+    flightdeck: 'Click any panel · drag to look around · scroll to lean in',
+  };
+
+  function setMode(next, { initial = false } = {}) {
+    if ((next === 'walkaround' && !walk) || (next === 'flightdeck' && !deck)) next = 'explore';
+    if (next === mode && !initial) return;
+    const prev = mode;
     mode = next;
     document.body.dataset.mode = mode;
     modeButtons.forEach((b) => {
@@ -124,43 +187,33 @@ async function boot() {
       if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     select3d(null);
+    if (prev === 'walkaround') walk?.stop();
     const dockEl = $('#dock');
-    if (mode === 'walkaround') {
-      $('#ac-family').textContent = ac.walkaround.title;
-      $('.stage-hint').textContent = 'Follow the numbered route · ← → to move between stops';
+    $('.stage-hint').textContent = HINTS[mode];
+
+    if (mode === 'flightdeck') {
+      useDataset('flightdeck');
       dockEl.classList.add('is-collapsed');
-      parkForWalkaround();
-      walk.start();
-      if (window.innerWidth <= 820) document.body.classList.remove('sidebar-collapsed');
     } else {
-      $('#ac-family').textContent = ac.meta.family;
-      $('.stage-hint').textContent = 'Click any part · drag to orbit · scroll to zoom';
-      dockEl.classList.remove('is-collapsed');
-      walk?.stop();
-      index.refresh();
-      viewer.setView(ac.camera.home);
+      useDataset('exterior', { fly: mode === 'explore' && !initial });
+      if (mode === 'walkaround') {
+        $('#ac-family').textContent = ac.walkaround.title;
+        dockEl.classList.add('is-collapsed');
+        parkForWalkaround();
+        walk.start();
+        if (window.innerWidth <= 820) document.body.classList.remove('sidebar-collapsed');
+      } else {
+        dockEl.classList.remove('is-collapsed');
+        index.refresh();
+        if (prev !== 'explore' && prev !== 'flightdeck') viewer.setView(ac.camera.home);
+      }
     }
     setTimeout(updateInsets, 380);
-    const hash = mode === 'walkaround' ? '#walkaround' : '';
+    const hash = MODE_HASH[mode];
     if (location.hash !== hash) history.replaceState(null, '', hash || location.pathname + location.search);
   }
   modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
-  window.addEventListener('hashchange', () => setMode(location.hash === '#walkaround' ? 'walkaround' : 'explore'));
-
-  function updateProgress() {
-    $('#progress-count').textContent = progress.count();
-    $('#progress-total').textContent = parts.length;
-    $('#progress-bar').style.width = `${(progress.count() / parts.length) * 100}%`;
-  }
-  updateProgress();
-
-  // view buttons
-  const viewNames = Object.keys(ac.camera.views);
-  $('#views').innerHTML = viewNames.map((n, i) => `<button class="vt-btn" type="button" data-view="${n}" title="${n} (${i + 1})">${n}</button>`).join('');
-  $('#views').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-view]');
-    if (b) viewer.setView(ac.camera.views[b.dataset.view]);
-  });
+  window.addEventListener('hashchange', () => setMode(modeFromHash()));
 
   const hotBtn = $('#t-hotspots'), isoBtn = $('#t-isolate');
   const setHot = (on) => { viewer.setHotspots(on); hotBtn.setAttribute('aria-pressed', on); store.set('hotspots', on); };
@@ -185,6 +238,7 @@ async function boot() {
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
+    const viewNames = Object.keys(ds.camera.views);
     if (k === 'Escape') { if (!help.hidden) { help.hidden = true; return; } select3d(null); }
     else if (mode === 'walkaround' && (k === 'ArrowRight' || k === 'ArrowLeft')) { e.preventDefault(); k === 'ArrowRight' ? walk.next() : walk.prev(); }
     else if (k === 'h' || k === 'H') setHot(hotBtn.getAttribute('aria-pressed') !== 'true');
@@ -198,20 +252,19 @@ async function boot() {
     } else if (k === 'g' || k === 'G') {
       const r = systems.set('gearLever', systems.get('gearLever') === 'UP' ? 'DN' : 'UP');
       if (!r.ok) toast(r.message, 'warn');
-    } else if (/^[1-9]$/.test(k) && viewNames[+k - 1]) viewer.setView(ac.camera.views[viewNames[+k - 1]]);
+    } else if (/^[1-9]$/.test(k) && viewNames[+k - 1]) viewer.setView(ds.camera.views[viewNames[+k - 1]]);
   });
 
-  // intro camera move (or straight into the walkaround via #walkaround)
-  if (location.hash === '#walkaround' && walk) {
-    setMode('walkaround', { fromHash: true });
-  } else viewer.flyTo(
-    new (viewer.camera.position.constructor)(...ac.camera.home.position),
-    new (viewer.camera.position.constructor)(...ac.camera.home.target),
-    2.4,
-  );
+  // start in the mode named by the URL, with an intro camera move on the exterior
+  const startMode = modeFromHash();
+  if (startMode !== 'explore') setMode(startMode, { initial: true });
+  else {
+    document.body.dataset.mode = 'explore';
+    const V = viewer.camera.position.constructor;
+    viewer.flyTo(new V(...ac.camera.home.position), new V(...ac.camera.home.target), 2.4);
+  }
   $('#loading').classList.add('is-done');
   document.body.classList.add('is-ready');
-  void selected;
 }
 
 boot().catch((err) => {

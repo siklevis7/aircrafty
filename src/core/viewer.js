@@ -35,7 +35,9 @@ export class Viewer {
     this.scene = new THREE.Scene();
     const pmrem = new THREE.PMREMGenerator(r);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.fog = new THREE.Fog(0xe9ebe4, 90, 260);
+    this.fog = new THREE.Fog(0xe9ebe4, 90, 260);
+    this.scene.fog = this.fog;
+    this.envGround = true;
 
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.5, 800);
     this.camera.position.set(70, 32, -80);
@@ -110,12 +112,21 @@ export class Viewer {
     this.scene.add(root);
     this.partMeshes.clear();
     this.pickables = [];
+    this.hoverId = null;
+    this.selectedId = null;
+    this.highlightSet = new Set();
+    this._applyCameraConfig(cameraCfg || {});
     root.updateMatrixWorld(true);
     root.traverse((o) => {
       if (!(o.isMesh && o.userData.partId)) return;
-      o.material = o.material.clone();
-      o.userData.baseEmissive = o.userData.baseEmissive || o.material.emissive.clone();
-      o.userData.baseOpacity = o.material.opacity;
+      if (!o.userData._ownMaterial) {
+        o.material = o.material.clone();
+        o.userData._ownMaterial = true;
+        o.userData.baseEmissive = o.userData.baseEmissive || o.material.emissive.clone();
+        o.userData.baseOpacity = o.material.opacity;
+      }
+      o.userData.hl = false;
+      o.material.emissive.copy(o.userData.baseEmissive);
       o.castShadow = !o.userData.bulb;
       o.receiveShadow = true;
       const id = o.userData.partId;
@@ -128,8 +139,24 @@ export class Viewer {
 
   addTicker(fn) { this.tickers.push(fn); }
 
+  _applyCameraConfig(cfg) {
+    const env = cfg.env || {};
+    this.envGround = env.ground !== false;
+    this.scene.fog = env.fog === false ? null : this.fog;
+    const lim = { minDistance: 2.5, maxDistance: 140, near: 0.5, fov: 38, ...(cfg.limits || {}) };
+    this.controls.minDistance = lim.minDistance;
+    this.controls.maxDistance = lim.maxDistance;
+    this.camera.near = lim.near;
+    this.camera.fov = lim.fov;
+    this.baseFov = lim.fov;
+    this.camera.updateProjectionMatrix();
+    this.bounds = cfg.bounds ? { min: new THREE.Vector3(...cfg.bounds.min), max: new THREE.Vector3(...cfg.bounds.max) } : null;
+    this.focusCfg = { scale: 1.85, add: 3, min: 5, max: 66, ...(cfg.focus || {}) };
+    this.flight = null;
+  }
+
   setTheme({ fog, gridMajor, gridMinor, gridOpacity, shadow, accent, hover, exposure }) {
-    this.scene.fog.color.set(fog);
+    this.fog.color.set(fog);
     this.grid.material.dispose();
     this.scene.remove(this.grid);
     this.grid = new THREE.GridHelper(240, 120, gridMajor, gridMinor);
@@ -167,7 +194,8 @@ export class Viewer {
     set.forEach((m) => box.expandByObject(m));
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3()).length();
-    const dist = THREE.MathUtils.clamp(size * 1.85 + 3, 5, 66);
+    const fc = this.focusCfg;
+    const dist = THREE.MathUtils.clamp(size * fc.scale + fc.add, fc.min, fc.max);
     const hint = this.partsMeta.get(id)?.view;
     let dir;
     if (hint) dir = new THREE.Vector3(...hint).normalize();
@@ -177,8 +205,6 @@ export class Viewer {
       dir.y = Math.max(dir.y, 0.3);
       dir.normalize();
     }
-    // the aircraft rotates with nothing, but the airframe may be lifted in flight
-    if (this.root) center.y = Math.max(center.y, 0.3);
     this.flyTo(center.clone().addScaledVector(dir, dist), center);
   }
 
@@ -470,7 +496,8 @@ export class Viewer {
       if (k >= 1) this.flight = null;
     }
     this.controls.update();
-    const above = this.camera.position.y > 0.05;
+    if (this.bounds) this.camera.position.clamp(this.bounds.min, this.bounds.max);
+    const above = this.camera.position.y > 0.05 && this.envGround;
     this.grid.visible = above;
     this.ground.visible = above;
     this._paintHighlights(now);
