@@ -153,6 +153,7 @@ export function paintPanel(canvas, layout) {
   const rows = layout.rows || [];
   const top = titleH * 1.15, avail = H - top - H * 0.03;
   const rowH = avail / Math.max(1, rows.length);
+  const controls = [];
   rows.forEach((row, ri) => {
     const cy = top + rowH * (ri + 0.45);
     const n = row.length;
@@ -163,8 +164,10 @@ export function paintPanel(canvas, layout) {
       const draw = prim[it.t];
       if (draw) draw(ctx, cx, cy, u, it);
       if (it.label) label(ctx, it.label, cx, cy + u * 0.82 + (it.t === 'gauge' ? u * 0.1 : 0), Math.max(12, u * 0.27), COLORS.ink);
+      controls.push({ x: cx / W, y: cy / H, r: (u * 0.75) / Math.min(W, H), rx: (u * 0.75) / W, ry: (u * 0.75) / H, ri, ci, it });
     });
   });
+  return controls; // normalized positions for hit-testing clicks on the panel
 }
 
 export { COLORS, label as drawLabel, rrect };

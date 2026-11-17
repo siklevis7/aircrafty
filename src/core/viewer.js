@@ -7,10 +7,11 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 export class Viewer {
-  constructor(container, { onHover = () => {}, onSelect = () => {} } = {}) {
+  constructor(container, { onHover = () => {}, onSelect = () => {}, onInteract = () => {} } = {}) {
     this.container = container;
     this.onHover = onHover;
     this.onSelect = onSelect;
+    this.onInteract = onInteract;
     this.tickers = [];
     this.partMeshes = new Map();
     this.pickables = [];
@@ -50,7 +51,7 @@ export class Viewer {
     this.controls.zoomToCursor = true;
 
     // lights
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x6d737b, 0.55);
+    const hemi = (this.hemi = new THREE.HemisphereLight(0xffffff, 0x6d737b, 0.55));
     this.scene.add(hemi);
     const sun = (this.sun = new THREE.DirectionalLight(0xfff8ee, 2.6));
     sun.position.set(30, 50, -20);
@@ -214,6 +215,7 @@ export class Viewer {
   }
 
   flyTo(position, target, duration = 1.1, { arc = 0 } = {}) {
+    this.tooltip.classList.remove('is-visible');
     this.flight = {
       p0: this.camera.position.clone(), t0: this.controls.target.clone(),
       p1: position.clone(), t1: target.clone(), time: 0, duration, arc,
@@ -290,6 +292,13 @@ export class Viewer {
   // ------------------------------------------------------------------ internals
   setFov(deg) { this.camera.fov = deg; this.camera.updateProjectionMatrix(); }
 
+  /** Scale the global lights (1 = normal daylight). Used for night scenes. */
+  setLightScale(k) {
+    this.hemi.intensity = 0.55 * k;
+    this.sun.intensity = 2.6 * k;
+    this.scene.environmentIntensity = Math.max(0.15, k);
+  }
+
   /** Keep the visual center clear of overlay panels (px covered on the right / bottom). */
   setInsets({ right = 0, bottom = 0 }) { this.insetTarget = { right, bottom }; }
 
@@ -321,18 +330,20 @@ export class Viewer {
     if (changed) this._applyInsets();
   }
 
-  _pick(clientX, clientY) {
+  _hit(clientX, clientY) {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const hits = this.raycaster.intersectObjects(this.pickables, false);
     for (const h of hits) {
       if (h.object.visible && !(this.isolate && this.selectedId && h.object.userData.partId !== this.selectedId && h.object.material.opacity < 0.5)) {
-        return h.object.userData.partId;
+        return h;
       }
     }
     return null;
   }
+
+  _pick(clientX, clientY) { return this._hit(clientX, clientY)?.object.userData.partId ?? null; }
 
   _pointerMove(e) {
     const rect = this.container.getBoundingClientRect();
@@ -346,8 +357,18 @@ export class Viewer {
     const moved = Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y);
     this.downAt = null;
     if (moved > 5 || e.button !== 0) return;
-    const id = this._pick(e.clientX, e.clientY);
-    this.onSelect(id);
+    const hit = this._hit(e.clientX, e.clientY);
+    const interact = hit?.object.userData.interact;
+    if (interact) {
+      const r = interact({ uv: hit.uv, shift: e.shiftKey });
+      if (r?.handled) {
+        this.onInteract(r, hit.object.userData.partId);
+        this._lastHover = null; // refresh the hint (switch positions change)
+        this._pendingHover = { x: e.clientX, y: e.clientY };
+        return;
+      }
+    }
+    this.onSelect(hit?.object.userData.partId ?? null);
   }
 
   _setHover(id) {
@@ -480,7 +501,15 @@ export class Viewer {
     if (this._pendingHover) {
       const { x, y } = this._pendingHover;
       this._pendingHover = null;
-      this._setHover(this._pick(x, y));
+      const hit = this._hit(x, y);
+      const id = hit?.object.userData.partId ?? null;
+      this._setHover(id);
+      const hint = hit?.object.userData.hint?.(hit.uv);
+      if (id) {
+        this.tooltip.textContent = hint || this.partsMeta.get(id)?.name || '';
+        this.tooltip.classList.toggle('is-hint', !!hint);
+        this.renderer.domElement.style.cursor = 'pointer';
+      }
     }
     if (this.tooltip.classList.contains('is-visible')) {
       this.tooltip.style.transform = `translate3d(${this.pointerPx.x + 14}px, ${this.pointerPx.y + 16}px, 0)`;

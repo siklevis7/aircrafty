@@ -46,7 +46,10 @@ async function boot() {
   $('#ac-name').textContent = ac.meta.name;
   $('#specs').innerHTML = ac.meta.specs.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
 
-  viewer = new Viewer($('#stage'), { onSelect: (id) => select3d(id) });
+  viewer = new Viewer($('#stage'), {
+    onSelect: (id) => select3d(id),
+    onInteract: (r) => { if (r.ok === false && r.message) toast(r.message, 'warn'); },
+  });
   const { root, systems } = ac.build();
 
   // Each dataset is a 3D scene plus its own clickable parts, categories, progress and camera views.
@@ -191,6 +194,7 @@ async function boot() {
     const dockEl = $('#dock');
     $('.stage-hint').textContent = HINTS[mode];
 
+    viewer.setLightScale(mode === 'flightdeck' && night ? 0.1 : 1);
     if (mode === 'flightdeck') {
       useDataset('flightdeck');
       dockEl.classList.add('is-collapsed');
@@ -214,6 +218,16 @@ async function boot() {
   }
   modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
   window.addEventListener('hashchange', () => setMode(modeFromHash()));
+
+  const nightBtn = $('#t-night');
+  let night = false;
+  const setNight = (on) => {
+    night = on;
+    deck?.setNight(on);
+    nightBtn.setAttribute('aria-pressed', on);
+    if (mode === 'flightdeck') viewer.setLightScale(on ? 0.1 : 1);
+  };
+  nightBtn.addEventListener('click', () => setNight(!night));
 
   const hotBtn = $('#t-hotspots'), isoBtn = $('#t-isolate');
   const setHot = (on) => { viewer.setHotspots(on); hotBtn.setAttribute('aria-pressed', on); store.set('hotspots', on); };
@@ -243,6 +257,7 @@ async function boot() {
     else if (mode === 'walkaround' && (k === 'ArrowRight' || k === 'ArrowLeft')) { e.preventDefault(); k === 'ArrowRight' ? walk.next() : walk.prev(); }
     else if (k === 'h' || k === 'H') setHot(hotBtn.getAttribute('aria-pressed') !== 'true');
     else if (k === 'i' || k === 'I') setIso(isoBtn.getAttribute('aria-pressed') !== 'true');
+    else if ((k === 'n' || k === 'N') && mode === 'flightdeck') setNight(!night);
     else if (k === '/') { e.preventDefault(); $('#search').focus(); }
     else if (k === '[' || k === ']') {
       const det = ac.controlPanel.find((g) => g.id === 'flaps')?.items[0].options.map((o) => o.value) || [];

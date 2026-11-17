@@ -20,7 +20,7 @@ const LAYOUTS = {
   'fd-nav-displays': { title: 'NAVIGATION / DISPLAYS', rows: [[K('VHF NAV'), K('IRS'), K('FMC'), K('DISPLAYS'), K('CONTROL')]] },
   'fd-fuel': { title: 'FUEL', rows: [[GA('FUEL TEMP'), A('VALVE\nOPEN', 'blue'), K('CROSSFEED'), A('VALVE\nOPEN', 'blue')], [T('AFT 1', { on: true }), T('FWD 1', { on: true }), T('CTR L'), T('CTR R'), T('FWD 2', { on: true }), T('AFT 2', { on: true })], [A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS')]] },
   'fd-electrical': { title: 'ELECTRICAL', rows: [[GA('DC'), GA('AC')], [K('DC SEL'), G('BAT', { on: true }), K('AC SEL')], [A('TRANSFER\nBUS OFF'), A('SOURCE\nOFF'), A('TRANSFER\nBUS OFF')], [G('STANDBY\nPOWER', { on: true }), T('GRD PWR'), T('BUS XFR', { on: true })], [T('GEN 1'), T('APU GEN'), T('GEN 2')]] },
-  'fd-apu': { title: 'APU', rows: [[GA('APU EGT'), A('MAINT', 'blue'), A('LOW OIL\nPRESS')], [A('FAULT'), A('OVER\nSPEED'), K('APU')], [A('APU GEN\nOFF BUS', 'blue', { key: 'apuGen' })]] },
+  'fd-apu': { title: 'APU', rows: [[GA('APU EGT'), A('MAINT', 'blue'), A('LOW OIL\nPRESS')], [A('FAULT'), A('OVER\nSPEED'), K('APU', { key: 'apu' })], [A('APU GEN\nOFF BUS', 'blue', { key: 'apuGen' })]] },
   'fd-cabin-signs': { title: 'CABIN / EQUIP', rows: [[T('EQUIP COOL\nSUPPLY'), T('EQUIP COOL\nEXHAUST')], [G('EMER EXIT\nLIGHTS', { on: true }), A('NOT\nARMED')], [T('NO SMOKING', { on: true }), T('FASTEN BELTS', { on: true })], [B('ATTEND'), B('GRD CALL')]] },
   'fd-window-probe-heat': { title: 'WINDOW / PROBE HEAT', rows: [[A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true })], [T('L SIDE', { on: true }), T('L FWD', { on: true }), T('R FWD', { on: true }), T('R SIDE', { on: true })], [T('PROBE A'), T('TEST'), T('PROBE B')], [A('CAPT\nPITOT'), A('L ELEV\nPITOT'), A('F/O\nPITOT'), A('TEMP\nPROBE')]] },
   'fd-anti-ice': { title: 'ANTI-ICE', rows: [[A('WING\nANTI-ICE', 'blue'), A('COWL\nANTI-ICE'), A('COWL\nANTI-ICE')], [T('WING'), T('ENG 1'), T('ENG 2')]] },
@@ -318,9 +318,12 @@ export function buildFlightDeck(systems) {
   const wsLen = wsBottom.distanceTo(wsTop);
   const wsAngle = Math.atan2(wsTop.y - wsBottom.y, wsTop.x - wsBottom.x);
   for (const z of [0, -0.56, 0.56, -1.0, 1.0]) {
-    const post = box(0.06, wsLen, 0.06, mats.trim, [wsMid.x, wsMid.y, z]);
+    const post = box(z === 0 ? 0.035 : 0.05, wsLen, 0.045, mats.glare, [wsMid.x, wsMid.y, z]);
     post.rotation.z = wsAngle - Math.PI / 2;
   }
+  // window sill along the top of the glareshield and the header
+  box(0.05, 0.035, 2.06, mats.glare, [wsBottom.x - 0.02, wsBottom.y + 0.01, 0]);
+  box(0.05, 0.035, 2.06, mats.glare, [wsTop.x + 0.01, wsTop.y, 0]);
   const wsGlass = new THREE.Mesh(new THREE.PlaneGeometry(2.0, wsLen), mats.glass);
   wsGlass.position.copy(wsMid);
   wsGlass.lookAt(wsMid.clone().add(V(-Math.sin(wsAngle), Math.cos(wsAngle), 0)));
@@ -331,6 +334,7 @@ export function buildFlightDeck(systems) {
   // ---- zones helpers
   const zoneMeshes = [];
   const dynamic = [];
+  const nightables = [];
   function facing(pos, dir) {
     const g = new THREE.Group();
     g.position.copy(pos);
@@ -341,12 +345,15 @@ export function buildFlightDeck(systems) {
   function zone(parent, partId, w, h, x, y, drawer, opts = {}) {
     const canvas = makeCanvas(w, h);
     const tex = canvasTexture(canvas);
+    const overrides = {}; // local positions of switches that aren't linked to aircraft systems
+    let controls = [];
     const redraw = (state) => {
       const ctx = canvas.getContext('2d');
       if (typeof drawer === 'function') drawer(ctx, canvas.width, canvas.height, state);
-      else paintPanel(canvas, resolveLayout(drawer, state));
+      else controls = paintPanel(canvas, resolveLayout(drawer, state, overrides));
       tex.needsUpdate = true;
     };
+    const redrawNow = () => redraw(opts.state ? opts.state() : {});
     redraw(opts.state ? opts.state() : {});
     // Screens are self-lit only (black base color, full emissive) so colors stay true.
     const mat = new THREE.MeshStandardMaterial({
@@ -360,22 +367,71 @@ export function buildFlightDeck(systems) {
     if (partId) { m.userData.partId = partId; m.userData.side = opts.side || 'C'; }
     parent.add(m);
     zoneMeshes.push(m);
+    if (!opts.screen) nightables.push(m);
+
+    if (typeof drawer !== 'function') {
+      const OPERABLE = new Set(['toggle', 'guard', 'knob', 'button']);
+      const hit = (uv) => {
+        if (!uv) return null;
+        const px = uv.x, py = 1 - uv.y;
+        return controls.find((c) => OPERABLE.has(c.it.t) && ((px - c.x) / c.rx) ** 2 + ((py - c.y) / c.ry) ** 2 <= 1) || null;
+      };
+      const name = (c) => (c.it.label || c.it.text || '').replace(/\n/g, ' ');
+      m.userData.hint = (uv) => {
+        const c = hit(uv);
+        if (!c) return null;
+        const linked = c.it.key && c.it.key !== 'apuGen';
+        return `${name(c)} · click to ${c.it.t === 'button' ? 'press' : c.it.t === 'knob' ? 'turn' : 'switch'}${linked ? ' (linked to aircraft)' : ''}`;
+      };
+      m.userData.interact = ({ uv }) => {
+        const c = hit(uv);
+        if (!c) return null;
+        const id = `${c.ri},${c.ci}`;
+        const key = c.it.key;
+        if (key && key.startsWith('light.')) {
+          const r = systems.set(key, !systems.get(key));
+          return { handled: true, ok: r.ok, message: r.message };
+        }
+        if (key === 'apu') {
+          const r = systems.set('apu', !systems.get('apu'));
+          return { handled: true, ok: r.ok, message: r.message };
+        }
+        const o = (overrides[id] = overrides[id] || {});
+        if (c.it.t === 'toggle' || c.it.t === 'guard') o.on = !(o.on ?? c.it.on ?? false);
+        else if (c.it.t === 'knob') {
+          const steps = [-0.8, 0, 0.8];
+          const curA = o.angle ?? c.it.angle ?? -0.6;
+          const i = steps.findIndex((s) => s > curA + 0.01);
+          o.angle = i === -1 ? steps[0] : steps[i];
+        } else if (c.it.t === 'button') {
+          o.lit = c.it.lit ? null : '#e8e2c8';
+          redrawNow();
+          setTimeout(() => { delete o.lit; redrawNow(); }, 220);
+          return { handled: true, ok: true };
+        }
+        redrawNow();
+        return { handled: true, ok: true };
+      };
+    }
     if (opts.state) {
       let last = '';
       dynamic.push(() => { const st = opts.state(); const sig = JSON.stringify(st); if (sig !== last) { last = sig; redraw(st); } });
     }
     return m;
   }
-  function resolveLayout(layout, state) {
-    if (!state || !Object.keys(state).length) return layout;
+  function resolveLayout(layout, state = {}, overrides = {}) {
     return {
       ...layout,
-      rows: layout.rows.map((row) => row.map((it) => {
-        if (!it.key) return it;
-        if (it.key === 'le') return { ...it, lit: state.le?.[it.i] > 0, color: state.le?.[it.i] === 1 ? 'amber' : 'green' };
-        if (it.key === 'apuGen') return { ...it, lit: !!state.apuGen };
-        if (it.key.startsWith('light.')) return { ...it, on: !!state[it.key] };
-        return it;
+      rows: layout.rows.map((row, ri) => row.map((it, ci) => {
+        let out = it;
+        const o = overrides[`${ri},${ci}`];
+        if (o) out = { ...out, ...Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null)) };
+        if (!it.key) return out;
+        if (it.key === 'le') return { ...out, lit: state.le?.[it.i] > 0, color: state.le?.[it.i] === 1 ? 'amber' : 'green' };
+        if (it.key === 'apuGen') return { ...out, lit: !!state.apuGen };
+        if (it.key === 'apu') return { ...out, angle: state.apu ? 0.7 : -0.7 };
+        if (it.key.startsWith('light.')) return { ...out, on: !!state[it.key] };
+        return out;
       })),
     };
   }
@@ -387,7 +443,7 @@ export function buildFlightDeck(systems) {
   const mainPanel = facing(V(0.88, 0.8, 0), V(-1, 0.2, 0));
   const backing = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.56), mats.panel);
   mainPanel.add(backing);
-  box(0.2, 0.62, 2.04, mats.panel, [0.98, 0.78, 0]);
+  box(0.2, 0.62, 2.04, mats.panel, [1.08, 0.78, 0]); // structure behind the tilted panel (kept clear of its face)
   const pfdState = () => {
     const st = sysState();
     const air = !st.onGround;
@@ -437,7 +493,7 @@ export function buildFlightDeck(systems) {
   const yTop = 0.34, yBot = -0.2;
   const place = (id, ci, y1, y2, layoutId = id) =>
     zone(ovh, id, cw - 0.006, (y2 - y1) - 0.006, col(ci), (y1 + y2) / 2, L(layoutId), {
-      state: LAYOUTS[layoutId].rows.some((r) => r.some((it) => it.key)) ? () => ({ ...sysState(), apuGen: ann().apuGen.state !== 'off' }) : null,
+      state: LAYOUTS[layoutId].rows.some((r) => r.some((it) => it.key)) ? () => ({ apu: !!sysState().apu, apuGen: ann().apuGen.state !== 'off' }) : null,
     });
   place('fd-flight-controls', 0, 0.06, yTop);
   place('fd-nav-displays', 0, -0.06, 0.06);
@@ -585,6 +641,47 @@ export function buildFlightDeck(systems) {
     box(0.3, 0.12, 0.06, mats.trim, [0.32, 0.66, -1.0]);
   }
 
+  // ---- direct manipulation of levers and wheels
+  const operable = (obj, hint, act) => obj.traverse((m) => {
+    if (!m.isMesh) return;
+    m.userData.hint = () => hint;
+    m.userData.interact = ({ shift }) => {
+      const r = act(shift);
+      return { handled: true, ok: r?.ok !== false, message: r?.message };
+    };
+  });
+  operable(flapLever, 'Flap lever · click: next detent · Shift+click: back one', (shift) => {
+    const i = FLAP_DETENTS.indexOf(systems.get('flapLever'));
+    const n = FLAP_DETENTS[Math.max(0, Math.min(FLAP_DETENTS.length - 1, i + (shift ? -1 : 1)))];
+    return systems.set('flapLever', n);
+  });
+  operable(gearLever, 'Gear lever · click: UP / DN · Shift+click: OFF', (shift) => {
+    if (shift) return systems.set('gearLever', 'OFF');
+    return systems.set('gearLever', systems.get('gearLever') === 'DN' ? 'UP' : 'DN');
+  });
+  const SB = ['DOWN', 'ARMED', 'FLIGHT', 'UP'];
+  operable(sbLever, 'Speed brake · click: next position · Shift+click: back', (shift) => {
+    const i = SB.indexOf(systems.get('speedbrake'));
+    return systems.set('speedbrake', SB[Math.max(0, Math.min(SB.length - 1, i + (shift ? -1 : 1)))]);
+  });
+  thrust.forEach((t) => operable(t, 'Reverse thrust levers · click to raise / stow', () => systems.set('reversers', !systems.get('reversers'))));
+  wheels.forEach((w) => operable(w, 'Stab trim wheel · click: nose up · Shift+click: nose down', (shift) =>
+    systems.set('stabTrim', Math.round(((parseFloat(systems.readout('stabUnits')) || 5) + (shift ? -0.5 : 0.5)) * 4) / 4)));
+
+  // ---- day / night
+  const sky = root.children.find((c) => c.geometry?.type === 'SphereGeometry');
+  function setNight(on) {
+    sky.material.color.set(on ? '#1a2233' : '#ffffff');
+    amb.intensity = on ? 0.12 : 0.9;
+    dome.intensity = on ? 0.35 : 1.2;
+    dome.color.set(on ? '#ffd9a8' : '#fff3e0');
+    for (const m of nightables) {
+      const base = m.userData.baseEmissive || (m.userData.baseEmissive = m.material.emissive.clone());
+      base.set(on ? '#8a8a8a' : '#2a2a2a');
+      if (!m.userData.hl) m.material.emissive.copy(base);
+    }
+  }
+
   // ---- animation from systems
   const cur = { flap: 0, sb: 0.12, gear: -0.04, rev: 0, stab: 5, roll: 0, pitch: 0, yaw: 0 };
   const approach = (a, b, k) => a + (b - a) * k;
@@ -612,5 +709,5 @@ export function buildFlightDeck(systems) {
     dynamic.forEach((f) => f());
   }
 
-  return { root, update };
+  return { root, update, setNight };
 }

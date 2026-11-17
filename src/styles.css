@@ -234,6 +234,9 @@ body.has-selection .view-tools { right: calc(var(--info-w) + 32px); }
 .vt-btn:hover { background: var(--surface-2); color: var(--ink); }
 .vt-btn[aria-pressed='true'] { background: var(--ink); color: var(--surface-solid); }
 
+body:not([data-mode='flightdeck']) #t-night { display: none; }
+.tooltip.is-hint { text-transform: none; letter-spacing: 0.02em; font-weight: 500; font-family: var(--font-body); font-size: 12.5px; }
+
 /* markers */
 .marker-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; transition: opacity 0.3s; }
 .marker-layer.is-hidden { opacity: 0; }
