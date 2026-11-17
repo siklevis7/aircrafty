@@ -25,6 +25,17 @@ Content is researched from public sources and describes the most common configur
 with notable variants mentioned in the text. It's a study aid: operator documents (FCOM, QRH, SOP) always take precedence.
 Part data lives in `src/aircraft/b738/parts.js`.
 
+### Sources
+
+Figures are checked against Boeing's public documents wherever they cover the topic:
+
+- Boeing, *737 Airplane Characteristics for Airport Planning*, D6-58325-7 Rev C (Oct 2025): dimensions, ground clearances, weights, fuel, seating, cargo volume, engine models
+- Boeing, *Commercial Airplanes Reference Guide*: cargo hold volumes
+- FAA/Boeing *B-737 Master Minimum Equipment List*, Rev 63 (Apr 2026): equipment counts and configurations (slats, window heat, feel pitots, landing-light variants, speedbrake load alleviation)
+
+Systems logic that Boeing only publishes in the FCOM, which isn't public, comes from widely corroborated training references.
+The model itself is stylized. Its overall dimensions and ground clearances follow the Boeing data.
+
 ## Adding another aircraft
 
 1. Copy `src/aircraft/b738/` to a new folder, e.g. `src/aircraft/a320/`.

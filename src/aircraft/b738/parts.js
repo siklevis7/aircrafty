@@ -38,6 +38,7 @@ export const parts = [
       'In flight, the speed brake lever raises the flight spoilers only. The ground spoilers stay locked down.',
       'Moving the lever beyond the FLIGHT DETENT in flight can cause buffeting.',
       'With the lever ARMED, all spoilers deploy automatically on touchdown.',
+      '-800s with blended or split scimitar winglets have a Speedbrake Load Alleviation system that protects the wing at high speeds and weights.',
     ],
     tryIt: [{ label: 'Flight detent', set: { onGround: false, gearLever: 'UP', speedbrake: 'FLIGHT' } }, { label: 'Stow', set: { speedbrake: 'DOWN' } }],
   },
@@ -98,7 +99,7 @@ export const parts = [
     tryIt: [{ label: 'Flaps 5', set: { flapLever: 5 } }, { label: 'Flaps 15', set: { flapLever: 15 } }, { label: 'Flaps 40', set: { flapLever: 40 } }, { label: 'Flaps up', set: { flapLever: 0 } }],
   },
   {
-    id: 'le-slats', category: 'high-lift', name: 'Leading-Edge Slats', where: 'Outboard leading edge · 4 per wing',
+    id: 'le-slats', category: 'high-lift', name: 'Leading-Edge Slats', where: 'Outboard leading edge · 4 per wing (8 total)',
     what: 'Slats move forward and down from the wing\'s leading edge, opening a slot that lets the wing reach a higher angle of attack before stalling.',
     how: 'Powered by hydraulic system B. The standby hydraulic system can extend them through the alternate flaps system (extend only). With flaps 1, 2 or 5 the slats go to EXTEND (intermediate). With flaps 10 to 40 they go to FULL EXTEND.',
     notes: [
@@ -141,10 +142,10 @@ export const parts = [
   // ---------------------------------------------------------------- Powerplant
   {
     id: 'engine', category: 'powerplant', name: 'CFM56-7B Engines', where: 'Under each wing',
-    what: 'High-bypass, two-spool turbofans. Typical -800 ratings are 24,000 to 27,300 lbf of thrust, with a bypass ratio of about 5:1.',
+    what: 'High-bypass, two-spool turbofans. Boeing lists the CFM56-7B24, -7B26 and -7B27 for the -800, rated at about 24,000 to 27,300 lbf. Bypass ratio is about 5:1.',
     how: 'N1 is the fan and low-pressure spool, N2 the high-pressure core. The EEC (FADEC) controls the engine in normal or alternate mode. Each engine drives an IDG (90 kVA generator) and an engine-driven hydraulic pump (engine 1 for system A, engine 2 for system B), and supplies bleed air.',
     notes: [
-      'The flattened bottom of the nacelle gives ground clearance under the low-slung 737 wing.',
+      'The flattened bottom of the nacelle gives ground clearance under the low-slung 737 wing. Boeing gives just 0.48–0.64 m between the nacelle and the ground.',
       'Started by an air-driven starter using APU bleed, a ground cart or cross-bleed. Ignition L, R or BOTH.',
       'Engine anti-ice heats the cowl inlet lip with bleed air.',
     ],
@@ -180,7 +181,7 @@ export const parts = [
     id: 'fuselage', category: 'structure', name: 'Fuselage', where: 'Pressurized hull',
     what: 'Semi-monocoque aluminum pressure vessel holding the flight deck, passenger cabin and lower cargo holds. The -800 is 39.5 m (129 ft 6 in) long overall.',
     how: 'Pressurized by bleed air through the air conditioning packs, with the outflow valve controlling cabin altitude. The safety relief valves limit differential pressure to about 9.1 psi, keeping the cabin near 8,000 ft at FL410. Maximum differential for takeoff and landing is 0.125 psi.',
-    notes: ['Up to 189 passengers in a single-class layout (exit limit). Typical two-class layouts seat about 162.', 'Window belt, doors and cargo holds are explained under Doors & Exits.'],
+    notes: ['Boeing quotes 160 seats in two classes and up to 184 all-economy. Some high-density cabins are certified for up to 189.', 'Top of the fuselage is about 5.4–5.6 m above the ground, depending on weight (Boeing airport planning data).', 'Window belt, doors and cargo holds are explained under Doors & Exits.'],
   },
   {
     id: 'radome', category: 'structure', name: 'Radome', where: 'Nose cone',
@@ -192,7 +193,7 @@ export const parts = [
   {
     id: 'wing', category: 'structure', name: 'Wings', where: 'Low-mounted, swept 25°',
     what: 'Swept 25° at quarter chord. The span is 34.3 m, or 35.8 m with blended winglets. The wings carry the main fuel tanks.',
-    how: 'Main tanks 1 and 2 are in the wings and the center tank is in the center wing box. Total usable fuel is about 26,020 L (6,875 US gal).',
+    how: 'Main tanks 1 and 2 are in the wings and the center tank is in the center wing box. Total usable fuel is 26,024 L (6,875 US gal, about 20,900 kg), per Boeing\'s airport planning data.',
     notes: ['Dihedral helps lateral stability.', 'Wing anti-ice heats the three inboard leading-edge slats on each wing with bleed air.'],
   },
   {
@@ -255,13 +256,13 @@ export const parts = [
     id: 'aft-cargo-door', category: 'doors', name: 'Aft Cargo Door', where: 'Right lower fuselage, behind the wing',
     what: 'Access to the aft lower cargo hold.',
     how: 'Opens inward and upward, operated manually.',
-    notes: ['The aft hold is about 25.0 m³ (883 ft³) on the -800. With the forward hold, that\'s 43.7 m³ in total.'],
+    notes: ['The aft hold is about 25.0 m³ (883 ft³) on the -800, for 43.7 m³ of bulk volume in both holds (Boeing reference guide). Boeing\'s airport planning data gives a maximum lower-deck volume of 45.1 m³ (1,591 ft³).'],
     tryIt: [{ label: 'Open doors', set: { onGround: true, gearLever: 'DN', doors: true } }, { label: 'Close doors', set: { doors: false } }],
   },
   {
     id: 'flight-deck-windows', category: 'doors', name: 'Flight Deck Windows', where: 'Nose · windows 1, 2 and 3 each side',
     what: 'Window 1 is the forward windshield, window 2 the sliding side window, and window 3 the aft side window.',
-    how: 'Windows 1 and 2 have a conductive coating that is electrically heated for anti-ice and anti-fog, with overheat protection. Window 3 has anti-fog protection. Window 2 can be opened on the ground and serves as an emergency exit from the flight deck, with escape straps.',
+    how: 'Windows 1 and 2 have a conductive coating that is electrically heated for anti-ice and anti-fog, with overheat protection. Window 3 is also heated, for anti-fog. Window 2 can be opened on the ground and serves as an emergency exit from the flight deck, with escape straps.',
     notes: ['WINDOW HEAT switches and lights are on the forward overhead panel.', 'The NG has no eyebrow windows. Boeing dropped them before the NG entered service.'],
     view: [1, 0.35, -0.4],
   },
@@ -291,7 +292,7 @@ export const parts = [
   {
     id: 'landing-lights', category: 'lights', name: 'Landing Lights', where: 'Wing root leading edge',
     what: 'High-intensity lights for takeoff and landing.',
-    how: 'Fixed landing lights sit in each wing root leading edge (FIXED switches). Earlier NGs also have retractable landing lights in the lower fuselage. From about 2015, production NGs dropped the retractables in favor of fixed LED lights in the wing roots.',
+    how: 'There are two configurations. Earlier NGs have four landing lights: two fixed lights in the wing roots and two retractable lights. Later NGs (from about 2015) have two LED arrays in each wing-root fairing, an inboard and an outboard one, which also serve as the taxi lights.',
     notes: ['They\'re often left on below 10,000 ft to be more visible.'],
     tryIt: [{ label: 'Toggle', toggle: 'light.landing' }],
   },
@@ -354,7 +355,7 @@ export const parts = [
     view: [0.2, -0.2, -1],
   },
   {
-    id: 'elevator-feel-pitots', category: 'sensors', name: 'Elevator Feel Pitots', where: 'Dorsal fin, at the base of the vertical stabilizer',
+    id: 'elevator-feel-pitots', category: 'sensors', name: 'Elevator Feel Pitots', where: 'Vertical stabilizer · 2, at its base by the dorsal fin',
     what: 'Pitot probes that measure dynamic pressure for the elevator feel computer.',
     how: 'They feed the elevator feel system, so column forces increase with airspeed.',
     notes: ['They\'re high up, so use binoculars or a careful look during the walkaround.'],
@@ -444,7 +445,9 @@ export const meta = {
     ['Length', '39.5 m'],
     ['Wingspan', '35.8 m (winglets)'],
     ['Height', '12.5 m'],
-    ['MTOW', '79,010 kg'],
+    ['MTOW', '79,015 kg max'],
+    ['Fuel', '26,024 L'],
+    ['Seats', '160 / 184'],
     ['Engines', '2 × CFM56-7B'],
     ['Mmo', 'M 0.82'],
     ['Ceiling', '41,000 ft'],

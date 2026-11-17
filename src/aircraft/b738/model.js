@@ -72,11 +72,17 @@ export function buildModel() {
   const M = makeMaterials();
   const root = new THREE.Group();
   root.name = 'b738';
+  // flightGroup moves for lift-off. The airframe sits LIFT higher so the fuselage, doors and tail
+  // match Boeing's published ground clearances (D6-58325-7). Engines hang lower, as on the real aircraft.
+  const LIFT = 0.8;
+  const flightGroup = new THREE.Group();
+  root.add(flightGroup);
   const airframe = new THREE.Group();
-  root.add(airframe);
+  airframe.position.y = LIFT;
+  flightGroup.add(airframe);
 
   const rig = {
-    airframe,
+    airframe: flightGroup,
     flaps: [], slats: [], kruegers: [], ailerons: [],
     flightSpoilers: [], groundSpoilers: [], elevators: [], rudder: null,
     stab: null, mainGear: [], noseGear: null, noseDoors: [],
@@ -227,8 +233,8 @@ export function buildModel() {
     { id: 'overwing-exits', X: [16.88, 17.4], Y: [2.48, 3.45], side: -1, hinge: 'top' },
     { id: 'overwing-exits', X: [15.92, 16.44], Y: [2.48, 3.45], side: 1, hinge: 'top' },
     { id: 'overwing-exits', X: [16.88, 17.4], Y: [2.48, 3.45], side: 1, hinge: 'top' },
-    { id: 'forward-cargo-door', X: [8.4, 9.62], Y: [0.98, 2.02], side: 1, hinge: 'cargo' },
-    { id: 'aft-cargo-door', X: [25.6, 26.82], Y: [1.02, 2.06], side: 1, hinge: 'cargo' },
+    { id: 'forward-cargo-door', X: [8.4, 9.62], Y: [0.68, 1.7], side: 1, hinge: 'cargo' },
+    { id: 'aft-cargo-door', X: [25.6, 26.82], Y: [0.92, 1.95], side: 1, hinge: 'cargo' },
   ];
   for (const dd of doorDefs) {
     const [X0, X1] = dd.X, [Y0, Y1] = dd.Y, sk = sideKey(dd.side);
@@ -275,8 +281,8 @@ export function buildModel() {
     { s: 5.6, le: 17.85, c: 4.75, tc: 0.13 },
     { s: 17.16, le: 23.74, c: 1.3, tc: 0.105 },
   ], 0.02);
-  const WY = 1.55;
-  const DIHEDRAL = 6 * DEG;
+  const WY = 1.4;
+  const DIHEDRAL = 5 * DEG; // effective, tuned so the wingtip height matches Boeing's ground clearance data
   const TIP = 17.16;
 
   for (const side of [-1, 1]) {
@@ -383,7 +389,7 @@ export function buildModel() {
   }
 
   // ================================================================== Engines & pylons
-  const X0 = 13.3, YC = 1.3;
+  const X0 = 13.3, YC = 1.42; // world height: nacelle bottom ~0.55 m (Boeing: 0.48–0.64 m)
   const prof = (stations) => (xp) => interpStations(stations, 'x', xp).r;
   const cowlR = prof([{ x: 0, r: 0.9 }, { x: 0.18, r: 0.99 }, { x: 0.6, r: 1.04 }, { x: 1.8, r: 1.02 }, { x: 2.6, r: 0.97 }]);
   const sleeveR = prof([{ x: 2.6, r: 0.975 }, { x: 3.3, r: 0.9 }, { x: 3.9, r: 0.79 }]);
@@ -400,49 +406,49 @@ export function buildModel() {
     const tubeOf = (a, b, rf, nu, flat = true) =>
       gridSurface((u, v) => { const xp = lerp(a, b, u); return ring(xp, rf(xp), v * Math.PI * 2, flat); }, nu, 56);
 
-    add(airframe, tubeOf(0, 2.6, cowlR, 26), M.paint, 'engine', sk);
-    add(airframe, tubeOf(0, 0.66, () => 0.86, 4), M.darkMetal, 'engine', sk);
+    add(flightGroup, tubeOf(0, 2.6, cowlR, 26), M.paint, 'engine', sk);
+    add(flightGroup, tubeOf(0, 0.66, () => 0.86, 4), M.darkMetal, 'engine', sk);
     // inlet lip
-    add(airframe, gridSurface((u, v) => ring(-0.045 * Math.sin(Math.PI * u), lerp(0.9, 0.86, u), v * Math.PI * 2),
+    add(flightGroup, gridSurface((u, v) => ring(-0.045 * Math.sin(Math.PI * u), lerp(0.9, 0.86, u), v * Math.PI * 2),
       6, 56, {}), M.metal, 'engine', sk);
     // fan face, blades, spinner
-    const fan = add(airframe, new THREE.CircleGeometry(0.86, 48), M.darkMetal, 'engine', sk);
+    const fan = add(flightGroup, new THREE.CircleGeometry(0.86, 48), M.darkMetal, 'engine', sk);
     fan.position.set(wx(X0 + 0.66), YC - 0.02, zc);
     fan.rotation.y = Math.PI / 2;
     const bladeGeom = new THREE.BoxGeometry(0.02, 0.6, 0.12);
     for (let i = 0; i < 24; i++) {
       const a = (i / 24) * Math.PI * 2;
-      const b = add(airframe, bladeGeom, M.metal, 'engine', sk);
+      const b = add(flightGroup, bladeGeom, M.metal, 'engine', sk);
       b.position.set(wx(X0 + 0.6), YC - 0.02 + Math.cos(a) * 0.54, zc + Math.sin(a) * 0.54);
       b.rotation.set(a, 0, 0);
       b.rotateY(0.5);
     }
-    const spinner = add(airframe, new THREE.ConeGeometry(0.27, 0.55, 32), M.metal, 'engine', sk);
+    const spinner = add(flightGroup, new THREE.ConeGeometry(0.27, 0.55, 32), M.metal, 'engine', sk);
     spinner.position.set(wx(X0 + 0.38), YC - 0.02, zc);
     spinner.rotation.z = -Math.PI / 2;
     // core cowl & plug
-    add(airframe, tubeOf(3.65, 4.95, coreR, 12, false), M.metal, 'engine', sk);
-    add(airframe, tubeOf(4.85, 5.55, plugR, 8, false), M.darkMetal, 'engine', sk);
+    add(flightGroup, tubeOf(3.65, 4.95, coreR, 12, false), M.metal, 'engine', sk);
+    add(flightGroup, tubeOf(4.85, 5.55, plugR, 8, false), M.darkMetal, 'engine', sk);
 
     // thrust reverser: cascade (fixed) + translating sleeve
-    add(airframe, tubeOf(2.55, 3.15, () => 0.875, 6), M.hole, 'thrust-reverser', sk);
+    add(flightGroup, tubeOf(2.55, 3.15, () => 0.875, 6), M.hole, 'thrust-reverser', sk);
     const sleeve = new THREE.Group();
-    airframe.add(sleeve);
+    flightGroup.add(sleeve);
     add(sleeve, tubeOf(2.6, 3.9, sleeveR, 14), M.paint, 'thrust-reverser', sk);
     add(sleeve, tubeOf(3.86, 3.9, () => 0.76, 1), M.darkMetal, 'thrust-reverser', sk);
     rig.reversers.push({ sleeve, side });
 
     // pylon / strut
     const PY = [
-      { X: 14.0, yb: 2.18, yt: 2.3, hw: 0.04 },
-      { X: 14.8, yb: 2.15, yt: 2.5, hw: 0.19 },
-      { X: 16.6, yb: 2.08, yt: 2.42, hw: 0.2 },
-      { X: 17.6, yb: 1.9, yt: 2.15, hw: 0.19 },
-      { X: 18.6, yb: 1.65, yt: 1.98, hw: 0.17 },
-      { X: 20.4, yb: 1.62, yt: 2.02, hw: 0.11 },
-      { X: 21.6, yb: 1.88, yt: 2.04, hw: 0.03 },
+      { X: 14.0, yb: 2.3, yt: 2.42, hw: 0.04 },
+      { X: 14.8, yb: 2.27, yt: 2.7, hw: 0.19 },
+      { X: 16.6, yb: 2.2, yt: 2.68, hw: 0.2 },
+      { X: 17.6, yb: 2.02, yt: 2.58, hw: 0.19 },
+      { X: 18.6, yb: 1.86, yt: 2.52, hw: 0.17 },
+      { X: 20.4, yb: 1.98, yt: 2.6, hw: 0.11 },
+      { X: 21.6, yb: 2.4, yt: 2.64, hw: 0.03 },
     ];
-    add(airframe, gridSurface((u, v) => {
+    add(flightGroup, gridSurface((u, v) => {
       const X = lerp(14.0, 21.6, u);
       const st = interpStations(PY, 'X', X);
       const th = v * Math.PI * 2;
@@ -454,36 +460,40 @@ export function buildModel() {
   for (const side of [-1, 1]) {
     const sk = sideKey(side);
     const gx = wx(19.4), gz = side * 2.86;
-    const pv = makePivot(airframe, V(gx, 1.42, gz));
+    const ay = 0.56 - LIFT; // axle at 0.56 m above the ground in airframe coordinates
+    const pv = makePivot(airframe, V(gx, 1.2, gz));
     const G = pv.inner;
-    cylinderBetween(G, V(gx, 1.5, gz), V(gx, 0.86, gz), 0.1, M.metal, 'main-gear', sk);
-    cylinderBetween(G, V(gx, 0.95, gz), V(gx, 0.56, gz), 0.075, M.metal, 'main-gear', sk);
-    cylinderBetween(G, V(gx, 0.56, gz - 0.5), V(gx, 0.56, gz + 0.5), 0.06, M.darkMetal, 'main-gear', sk);
-    cylinderBetween(G, V(gx + 0.12, 1.05, gz), V(gx + 0.12, 0.7, gz), 0.03, M.darkMetal, 'main-gear', sk);
+    cylinderBetween(G, V(gx, 1.3, gz), V(gx, ay + 0.55, gz), 0.1, M.metal, 'main-gear', sk);
+    cylinderBetween(G, V(gx, ay + 0.65, gz), V(gx, ay, gz), 0.075, M.metal, 'main-gear', sk);
+    cylinderBetween(G, V(gx, ay, gz - 0.5), V(gx, ay, gz + 0.5), 0.06, M.darkMetal, 'main-gear', sk);
+    cylinderBetween(G, V(gx + 0.12, ay + 0.5, gz), V(gx + 0.12, ay + 0.14, gz), 0.03, M.darkMetal, 'main-gear', sk);
+    cylinderBetween(G, V(gx - 0.05, 1.1, gz), V(gx - 0.05, ay + 0.75, gz - side * 0.18), 0.045, M.darkMetal, 'main-gear', sk);
     for (const dz of [-0.42, 0.42]) {
       const tire = add(G, new THREE.TorusGeometry(0.39, 0.17, 16, 36), M.rubber, 'main-gear', sk);
-      tire.position.set(gx, 0.56, gz + dz);
+      tire.position.set(gx, ay, gz + dz);
       const hub = add(G, new THREE.CylinderGeometry(0.29, 0.29, 0.3, 28), M.metal, 'main-gear', sk);
-      hub.position.set(gx, 0.56, gz + dz);
+      hub.position.set(gx, ay, gz + dz);
       hub.rotation.x = Math.PI / 2;
     }
     rig.mainGear.push({ pivot: pv.pivot, axis: V(1, 0, 0), side });
   }
   {
-    const nx = wx(4.1);
-    const pv = makePivot(airframe, V(nx, 1.0, 0));
+    const nx = wx(4.55);
+    const ny = 0.35 - LIFT; // nose axle 0.35 m above the ground
+    const pv = makePivot(airframe, V(nx, 1.35, 0));
     const G = pv.inner;
-    cylinderBetween(G, V(nx, 1.1, 0), V(nx, 0.55, 0), 0.075, M.metal, 'nose-gear');
-    cylinderBetween(G, V(nx, 0.62, 0), V(nx, 0.35, 0), 0.055, M.metal, 'nose-gear');
-    cylinderBetween(G, V(nx, 0.35, -0.3), V(nx, 0.35, 0.3), 0.04, M.darkMetal, 'nose-gear');
+    cylinderBetween(G, V(nx, 1.45, 0), V(nx, ny + 0.3, 0), 0.075, M.metal, 'nose-gear');
+    cylinderBetween(G, V(nx, ny + 0.45, 0), V(nx, ny, 0), 0.055, M.metal, 'nose-gear');
+    cylinderBetween(G, V(nx, ny, -0.3), V(nx, ny, 0.3), 0.04, M.darkMetal, 'nose-gear');
+    cylinderBetween(G, V(nx - 0.05, 1.25, 0), V(nx - 0.55, 1.45, 0), 0.04, M.darkMetal, 'nose-gear');
     for (const dz of [-0.2, 0.2]) {
       const tire = add(G, new THREE.TorusGeometry(0.245, 0.1, 14, 30), M.rubber, 'nose-gear');
-      tire.position.set(nx, 0.35, dz);
+      tire.position.set(nx, ny, dz);
       const hub = add(G, new THREE.CylinderGeometry(0.16, 0.16, 0.17, 24), M.metal, 'nose-gear');
-      hub.position.set(nx, 0.35, dz);
+      hub.position.set(nx, ny, dz);
       hub.rotation.x = Math.PI / 2;
     }
-    makeLight(G, 'taxi', V(nx + 0.1, 0.78, 0), '#fff6e0', 'taxi-light', 'C',
+    makeLight(G, 'taxi', V(nx + 0.1, ny + 0.5, 0), '#fff6e0', 'taxi-light', 'C',
       { size: 0.07, glow: 1.3, spot: { dir: V(30, -1.6, 0), angle: 0.42, distance: 70 } });
     rig.noseGear = { pivot: pv.pivot, axis: V(0, 0, 1) };
 
@@ -504,18 +514,19 @@ export function buildModel() {
     const FIN = makePlanform([
       { s: 0, le: 28.6, c: 7.0, tc: 0.11 },
       { s: 0.9, le: 31.0, c: 5.0, tc: 0.11 },
-      { s: 7.9, le: 36.4, c: 2.2, tc: 0.09 },
+      { s: 7.45, le: 36.2, c: 2.25, tc: 0.09 },
     ], 0);
+    // fin tip at 12.5 m above the ground (Boeing: 12.37–12.62 m)
     const FY = 4.25;
     const map = (s, X, N) => [wx(X), FY + s, N];
     add(airframe, liftingPiece(FIN, map, { s0: 0, s1: 0.9, t0: 0, t1: 1, nu: 4, nv: 40, caps: false }), M.tail, 'vertical-fin');
-    add(airframe, liftingPiece(FIN, map, { s0: 0.9, s1: 7.9, t0: 0, t1: 0.7, nu: 20, nv: 40, caps: false }), M.tail, 'vertical-fin');
-    add(airframe, liftingPiece(FIN, map, { s0: 7.6, s1: 7.9, t0: 0.7, t1: 1, nu: 2, nv: 12 }), M.tail, 'vertical-fin');
+    add(airframe, liftingPiece(FIN, map, { s0: 0.9, s1: 7.45, t0: 0, t1: 0.7, nu: 20, nv: 40, caps: false }), M.tail, 'vertical-fin');
+    add(airframe, liftingPiece(FIN, map, { s0: 7.15, s1: 7.45, t0: 0.7, t1: 1, nu: 2, nv: 12 }), M.tail, 'vertical-fin');
     // tip cap for the fixed fin
-    add(airframe, liftingPiece(FIN, map, { s0: 7.88, s1: 7.9, t0: 0, t1: 0.7, nu: 1, nv: 40 }), M.tail, 'vertical-fin');
-    const [A, B] = hingeLine(FIN, map, 0.9, 7.6, 0.7);
+    add(airframe, liftingPiece(FIN, map, { s0: 7.43, s1: 7.45, t0: 0, t1: 0.7, nu: 1, nv: 40 }), M.tail, 'vertical-fin');
+    const [A, B] = hingeLine(FIN, map, 0.9, 7.15, 0.7);
     const pv = makePivot(airframe, A);
-    add(pv.inner, liftingPiece(FIN, map, { s0: 0.9, s1: 7.6, t0: 0.7, t1: 1, nu: 12, nv: 20 }), M.tail, 'rudder');
+    add(pv.inner, liftingPiece(FIN, map, { s0: 0.9, s1: 7.15, t0: 0.7, t1: 1, nu: 12, nv: 20 }), M.tail, 'rudder');
     const axis = B.clone().sub(A).normalize();
     rig.rudder = { pivot: pv.pivot, axis: axis.y < 0 ? axis.negate() : axis };
 
@@ -538,7 +549,7 @@ export function buildModel() {
       { s: 0, le: 34.0, c: 3.9, tc: 0.1 },
       { s: 7.2, le: 38.4, c: 1.25, tc: 0.085 },
     ], 0);
-    const HY = 3.45;
+    const HY = 3.85; // stabilizer tip ~5.5 m above the ground (Boeing: 5.49–5.64 m)
     const trim = makePivot(airframe, V(wx(36.6), HY, 0));
     rig.stab = { pivot: trim.pivot, axis: V(0, 0, 1) };
     for (const side of [-1, 1]) {
