@@ -16,15 +16,15 @@ const GA = (label, extra = {}) => ({ t: 'gauge', label, ...extra });
 const B = (text, extra = {}) => ({ t: 'button', text, ...extra });
 
 const LAYOUTS = {
-  'fd-flight-controls': { title: 'FLIGHT CONTROL', rows: [[G('FLT CONTROL A', { on: true }), G('FLT CONTROL B', { on: true })], [A('LOW PRESS'), A('LOW PRESS')], [G('SPOILER A', { on: true }), G('SPOILER B', { on: true })], [G('ALTN FLAPS'), T('UP / DN')], [T('YAW DAMPER', { on: true }), A('YAW DAMPER')]] },
+  'fd-flight-controls': { title: 'FLIGHT CONTROL', rows: [[G('FLT CONTROL A', { key: 'sw.fc.a' }), G('FLT CONTROL B', { key: 'sw.fc.b' })], [A('LOW PRESS', 'amber', { key: 'ann.fc.a' }), A('LOW PRESS', 'amber', { key: 'ann.fc.b' })], [G('SPOILER A', { on: true }), G('SPOILER B', { on: true })], [G('ALTN FLAPS'), T('UP / DN')], [T('YAW DAMPER', { on: true }), A('YAW DAMPER')]] },
   'fd-nav-displays': { title: 'NAVIGATION / DISPLAYS', rows: [[K('VHF NAV'), K('IRS'), K('FMC'), K('DISPLAYS'), K('CONTROL')]] },
-  'fd-fuel': { title: 'FUEL', rows: [[GA('FUEL TEMP'), A('VALVE\nOPEN', 'blue'), K('CROSSFEED'), A('VALVE\nOPEN', 'blue')], [T('AFT 1', { on: true }), T('FWD 1', { on: true }), T('CTR L'), T('CTR R'), T('FWD 2', { on: true }), T('AFT 2', { on: true })], [A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS')]] },
+  'fd-fuel': { title: 'FUEL', rows: [[GA('FUEL TEMP'), A('VALVE\nOPEN', 'blue'), K('CROSSFEED'), A('VALVE\nOPEN', 'blue')], [T('AFT 1', { key: 'sw.fuel.aft1' }), T('FWD 1', { key: 'sw.fuel.fwd1' }), T('CTR L', { key: 'sw.fuel.ctrl' }), T('CTR R', { key: 'sw.fuel.ctrr' }), T('FWD 2', { key: 'sw.fuel.fwd2' }), T('AFT 2', { key: 'sw.fuel.aft2' })], [A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrl' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrr' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd2' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft2' })]] },
   'fd-electrical': { title: 'ELECTRICAL', rows: [[GA('DC'), GA('AC')], [K('DC SEL'), G('BAT', { on: true }), K('AC SEL')], [A('TRANSFER\nBUS OFF'), A('SOURCE\nOFF'), A('TRANSFER\nBUS OFF')], [G('STANDBY\nPOWER', { on: true }), T('GRD PWR'), T('BUS XFR', { on: true })], [T('GEN 1'), T('APU GEN'), T('GEN 2')]] },
   'fd-apu': { title: 'APU', rows: [[GA('APU EGT'), A('MAINT', 'blue'), A('LOW OIL\nPRESS')], [A('FAULT'), A('OVER\nSPEED'), K('APU', { key: 'apu' })], [A('APU GEN\nOFF BUS', 'blue', { key: 'apuGen' })]] },
   'fd-cabin-signs': { title: 'CABIN / EQUIP', rows: [[T('EQUIP COOL\nSUPPLY'), T('EQUIP COOL\nEXHAUST')], [G('EMER EXIT\nLIGHTS', { on: true }), A('NOT\nARMED')], [T('NO SMOKING', { on: true }), T('FASTEN BELTS', { on: true })], [B('ATTEND'), B('GRD CALL')]] },
   'fd-window-probe-heat': { title: 'WINDOW / PROBE HEAT', rows: [[A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true })], [T('L SIDE', { on: true }), T('L FWD', { on: true }), T('R FWD', { on: true }), T('R SIDE', { on: true })], [T('PROBE A'), T('TEST'), T('PROBE B')], [A('CAPT\nPITOT'), A('L ELEV\nPITOT'), A('F/O\nPITOT'), A('TEMP\nPROBE')]] },
   'fd-anti-ice': { title: 'ANTI-ICE', rows: [[A('WING\nANTI-ICE', 'blue'), A('COWL\nANTI-ICE'), A('COWL\nANTI-ICE')], [T('WING'), T('ENG 1'), T('ENG 2')]] },
-  'fd-hydraulics': { title: 'HYDRAULIC PUMPS', rows: [[A('OVER\nHEAT'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('OVER\nHEAT')], [T('ELEC 2', { on: true }), T('ENG 1', { on: true }), T('ENG 2', { on: true }), T('ELEC 1', { on: true })], [A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('LOW\nPRESS')]] },
+  'fd-hydraulics': { title: 'HYDRAULIC PUMPS', rows: [[A('OVER\nHEAT'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('OVER\nHEAT')], [T('ELEC 2', { key: 'sw.hyd.elec2' }), T('ENG 1', { key: 'sw.hyd.eng1' }), T('ENG 2', { key: 'sw.hyd.eng2' }), T('ELEC 1', { key: 'sw.hyd.elec1' })], [A('LOW\nPRESS', 'amber', { key: 'ann.hyd.elec2' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.eng1' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.eng2' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.elec1' })]] },
   'fd-air-conditioning': { title: 'AIR CONDITIONING', rows: [[GA('TEMP'), K('TEMP SEL')], [K('CONT CAB'), K('FWD CAB'), K('AFT CAB')], [T('L RECIRC', { on: true }), T('R RECIRC', { on: true })]] },
   'fd-bleed-air': { title: 'BLEED AIR', rows: [[GA('DUCT PRESS'), A('DUAL\nBLEED')], [A('PACK'), A('WING-BODY\nOVHT'), A('BLEED\nTRIP OFF')], [T('L PACK', { on: true }), K('ISOLATION'), T('R PACK', { on: true })], [T('BLEED 1', { on: true }), T('APU BLEED'), T('BLEED 2', { on: true })]] },
   'fd-pressurization': { title: 'PRESSURIZATION', rows: [[{ t: 'screen', text: '35000', label: 'FLT ALT' }, { t: 'screen', text: '00000', label: 'LAND ALT' }], [GA('VALVE'), K('MODE'), T('MAN')]] },
@@ -80,6 +80,16 @@ function drawPFD(ctx, W, H, s) {
   };
   tape(W * 0.06, W * 0.14, s.speed, 20, (v) => String(v));
   tape(W * 0.79, W * 0.15, s.alt, 200, (v) => String(v));
+  // selected speed / altitude (magenta) from the MCP, with bugs on the tapes
+  ctx.fillStyle = '#ff4fd8'; ctx.font = `700 ${W * 0.045}px "JetBrains Mono", monospace`; ctx.textAlign = 'center';
+  ctx.fillText(String(s.selSpd), W * 0.13, cy - ah / 2 - H * 0.035);
+  ctx.fillText(String(s.selAlt), W * 0.865, cy - ah / 2 - H * 0.035);
+  const bug = (x, value, cur, step) => {
+    const y = Math.max(cy - ah / 2, Math.min(cy + ah / 2, cy - (value - cur) * (ah / (step * 7))));
+    ctx.fillRect(x, y - H * 0.012, W * 0.018, H * 0.024);
+  };
+  bug(W * 0.2, s.selSpd, s.speed, 20);
+  bug(W * 0.772, s.selAlt, s.alt, 200);
   // heading arc
   ctx.fillStyle = '#5b6168';
   ctx.beginPath(); ctx.arc(cx, H * 1.12, H * 0.33, Math.PI * 1.2, Math.PI * 1.8); ctx.lineTo(cx, H * 1.12); ctx.fill();
@@ -89,10 +99,10 @@ function drawPFD(ctx, W, H, s) {
   ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
   ctx.font = `600 ${W * 0.04}px "JetBrains Mono", monospace`; ctx.fillStyle = '#2bd46a';
   s.fma.forEach((m, i) => ctx.fillText(m, W * (0.25 + i * 0.25), H * 0.07));
-  if (s.cmd) { ctx.fillStyle = '#2bd46a'; ctx.font = `700 ${W * 0.05}px "JetBrains Mono", monospace`; ctx.fillText('CMD', cx, H * 0.17); }
+  if (s.cmd) { ctx.fillStyle = '#2bd46a'; ctx.font = `700 ${W * 0.05}px "JetBrains Mono", monospace`; ctx.fillText(s.cmd, cx, H * 0.17); }
 }
 
-function drawND(ctx, W, H) {
+function drawND(ctx, W, H, s = { hdg: 10 }) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   const cx = W / 2, cy = H * 0.84, r = H * 0.66;
   ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.005;
@@ -116,6 +126,17 @@ function drawND(ctx, W, H) {
   // aircraft
   ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.008;
   ctx.beginPath(); ctx.moveTo(cx, cy - H * 0.04); ctx.lineTo(cx - W * 0.03, cy + H * 0.03); ctx.lineTo(cx + W * 0.03, cy + H * 0.03); ctx.closePath(); ctx.stroke();
+  // selected heading bug (magenta) relative to the 010 track
+  {
+    let d = ((s.hdg - 10 + 540) % 360) - 180;
+    d = Math.max(-55, Math.min(55, d));
+    const a = (d * Math.PI) / 180;
+    const bx = cx + Math.sin(a) * r, by = cy - Math.cos(a) * r;
+    ctx.save(); ctx.translate(bx, by); ctx.rotate(a);
+    ctx.fillStyle = '#ff4fd8';
+    ctx.fillRect(-W * 0.03, -H * 0.03, W * 0.06, H * 0.03);
+    ctx.restore();
+  }
   ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = `600 ${W * 0.04}px "JetBrains Mono", monospace`;
   ctx.fillText('GS  0  TAS  0', W * 0.04, H * 0.07);
   ctx.textAlign = 'center'; ctx.fillText('TRK 010 MAG', cx, H * 0.07);
@@ -190,42 +211,62 @@ function drawCDU(ctx, W, H) {
   for (let i = 0; i < 6; i++) { ctx.fillRect(W * 0.03, H * (0.09 + i * 0.06), W * 0.06, H * 0.03); ctx.fillRect(W * 0.91, H * (0.09 + i * 0.06), W * 0.06, H * 0.03); }
 }
 
-function drawMCP(ctx, W, H) {
+// MCP layout, shared by the renderer and the click/scroll regions (normalized canvas coordinates).
+const MCP = {
+  windows: [
+    { id: 'crs', x: 0.015, w: 0.06, label: 'COURSE' },
+    { id: 'spd', x: 0.14, w: 0.08, label: 'IAS/MACH' },
+    { id: 'hdg', x: 0.335, w: 0.06, label: 'HEADING' },
+    { id: 'alt', x: 0.54, w: 0.09, label: 'ALTITUDE' },
+    { id: 'vs', x: 0.68, w: 0.08, label: 'VERT SPEED' },
+    { id: 'crs', x: 0.925, w: 0.06, label: 'COURSE' },
+  ],
+  buttons: [['N1', 0.12], ['SPEED', 0.17], ['LVL CHG', 0.22], ['VNAV', 0.27], ['HDG SEL', 0.33], ['LNAV', 0.38], ['VOR LOC', 0.43], ['APP', 0.48], ['ALT HLD', 0.56], ['V/S', 0.61], ['CMD A', 0.78], ['CMD B', 0.83]],
+  toggles: [['fdL', 'F/D', 0.035], ['at', 'A/T ARM', 0.085], ['fdR', 'F/D', 0.965]],
+  winY: 0.2, winH: 0.28, btnY: 0.6, btnH: 0.26, btnW: 0.045,
+};
+const pad3 = (n) => String(Math.round(n)).padStart(3, '0');
+
+function drawMCP(ctx, W, H, s) {
   ctx.fillStyle = '#40464d'; ctx.fillRect(0, 0, W, H);
-  const win = (x, w, text, lab) => {
-    ctx.fillStyle = '#07090b'; ctx.fillRect(W * x, H * 0.2, W * w, H * 0.28);
+  const text = { crs: pad3(s.crs), spd: String(s.spd), hdg: pad3(s.hdg), alt: String(s.alt), vs: s.modes.includes('V/S') ? `${s.vs > 0 ? '+' : ''}${s.vs}` : '' };
+  for (const w of MCP.windows) {
+    ctx.fillStyle = '#07090b'; ctx.fillRect(W * w.x, H * MCP.winY, W * w.w, H * MCP.winH);
     ctx.fillStyle = '#ffb21a'; ctx.font = `600 ${H * 0.2}px "JetBrains Mono", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(text, W * (x + w / 2), H * 0.34);
-    drawLabel(ctx, lab, W * (x + w / 2), H * 0.1, H * 0.1, '#fff');
-  };
-  win(0.02, 0.06, '010', 'COURSE');
-  win(0.15, 0.08, '250', 'IAS/MACH');
-  win(0.37, 0.06, '010', 'HEADING');
-  win(0.55, 0.09, '10000', 'ALTITUDE');
-  win(0.7, 0.08, '', 'VERT SPEED');
-  win(0.92, 0.06, '010', 'COURSE');
-  const btn = (x, text) => {
-    ctx.fillStyle = '#d6d9d5'; rrect(ctx, W * x, H * 0.62, W * 0.045, H * 0.24, H * 0.03); ctx.fill();
-    drawLabel(ctx, text, W * (x + 0.0225), H * 0.74, H * 0.075, '#222');
-  };
-  [['N1', 0.1], ['SPEED', 0.15], ['LVL CHG', 0.2], ['VNAV', 0.25], ['HDG SEL', 0.31], ['LNAV', 0.36], ['VOR LOC', 0.41], ['APP', 0.46], ['ALT HLD', 0.55], ['V/S', 0.6], ['CMD A', 0.79], ['CMD B', 0.84]]
-    .forEach(([t, x]) => btn(x, t));
-  drawLabel(ctx, 'A/T ARM', W * 0.1, H * 0.92, H * 0.08, '#fff');
-  drawLabel(ctx, 'F/D', W * 0.04, H * 0.62, H * 0.08, '#fff');
-  drawLabel(ctx, 'F/D', W * 0.96, H * 0.62, H * 0.08, '#fff');
+    ctx.fillText(text[w.id], W * (w.x + w.w / 2), H * 0.34);
+    drawLabel(ctx, w.label, W * (w.x + w.w / 2), H * 0.1, H * 0.1, '#fff');
+  }
+  for (const [t, x] of MCP.buttons) {
+    const on = t.startsWith('CMD') ? s[t === 'CMD A' ? 'cmdA' : 'cmdB'] : s.modes.includes(t);
+    ctx.fillStyle = '#d6d9d5'; rrect(ctx, W * x, H * MCP.btnY, W * MCP.btnW, H * MCP.btnH, H * 0.03); ctx.fill();
+    ctx.fillStyle = on ? '#35f07c' : '#5b6a60';
+    ctx.fillRect(W * (x + 0.006), H * (MCP.btnY + 0.03), W * (MCP.btnW - 0.012), H * 0.045);
+    drawLabel(ctx, t, W * (x + MCP.btnW / 2), H * (MCP.btnY + 0.16), H * 0.072, '#222');
+  }
+  for (const [key, lab, x] of MCP.toggles) {
+    const cx = W * x, cy = H * 0.74, r = H * 0.09;
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d9dde0'; ctx.fillRect(cx - r * 0.25, s[key] ? cy - r * 1.6 : cy, r * 0.5, r * 1.6);
+    drawLabel(ctx, lab, cx, H * 0.94, H * 0.075, '#fff');
+    drawLabel(ctx, s[key] ? 'ON' : 'OFF', cx, H * 0.52, H * 0.065, s[key] ? '#7ef0a8' : '#aaa');
+  }
 }
 
-function drawMasterCaution(ctx, W, H) {
+const SIX = {
+  L: ['FLT CONT', 'IRS', 'FUEL', 'ELEC', 'APU', 'OVHT/DET'],
+  R: ['ANTI-ICE', 'HYD', 'DOORS', 'ENG', 'OVERHEAD', 'AIR COND'],
+};
+function drawMasterCaution(ctx, W, H, s) {
   ctx.fillStyle = '#2d3238'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#5c0d0a'; rrect(ctx, W * 0.08, H * 0.08, W * 0.38, H * 0.38, W * 0.03); ctx.fill();
   drawLabel(ctx, 'FIRE\nWARN', W * 0.27, H * 0.27, H * 0.11, 'rgba(255,90,80,0.65)');
-  ctx.fillStyle = '#4d3500'; rrect(ctx, W * 0.54, H * 0.08, W * 0.38, H * 0.38, W * 0.03); ctx.fill();
-  drawLabel(ctx, 'MASTER\nCAUTION', W * 0.73, H * 0.27, H * 0.1, 'rgba(255,190,60,0.65)');
-  const six = ['FLT CONT', 'IRS', 'FUEL', 'ELEC', 'APU', 'OVHT/DET'];
-  six.forEach((t, i) => {
+  ctx.fillStyle = s.mc ? '#ffb000' : '#4d3500'; rrect(ctx, W * 0.54, H * 0.08, W * 0.38, H * 0.38, W * 0.03); ctx.fill();
+  drawLabel(ctx, 'MASTER\nCAUTION', W * 0.73, H * 0.27, H * 0.1, s.mc ? '#1d1300' : 'rgba(255,190,60,0.65)');
+  SIX[s.side].forEach((t, i) => {
+    const lit = s.six.includes(t);
     const x = W * (0.08 + (i % 3) * 0.29), y = H * (0.56 + Math.floor(i / 3) * 0.2);
-    ctx.fillStyle = '#1d2024'; ctx.fillRect(x, y, W * 0.26, H * 0.16);
-    drawLabel(ctx, t, x + W * 0.13, y + H * 0.08, H * 0.07, 'rgba(255,190,60,0.35)');
+    ctx.fillStyle = lit ? '#ffb000' : '#1d2024'; ctx.fillRect(x, y, W * 0.26, H * 0.16);
+    drawLabel(ctx, t, x + W * 0.13, y + H * 0.08, H * 0.07, lit ? '#1d1300' : 'rgba(255,190,60,0.35)');
   });
 }
 
@@ -380,8 +421,9 @@ export function buildFlightDeck(systems) {
       m.userData.hint = (uv) => {
         const c = hit(uv);
         if (!c) return null;
-        const linked = c.it.key && c.it.key !== 'apuGen';
-        return `${name(c)} · click to ${c.it.t === 'button' ? 'press' : c.it.t === 'knob' ? 'turn' : 'switch'}${linked ? ' (linked to aircraft)' : ''}`;
+        const k = c.it.key || '';
+        const note = k.startsWith('light.') || k === 'apu' ? ' (linked to aircraft)' : k.startsWith('sw.') ? ' (live logic)' : '';
+        return `${name(c)} · click to ${c.it.t === 'button' ? 'press' : c.it.t === 'knob' ? 'turn' : 'switch'}${note}`;
       };
       m.userData.interact = ({ uv }) => {
         const c = hit(uv);
@@ -395,6 +437,11 @@ export function buildFlightDeck(systems) {
         if (key === 'apu') {
           const r = systems.set('apu', !systems.get('apu'));
           return { handled: true, ok: r.ok, message: r.message };
+        }
+        if (key && key.startsWith('sw.')) {
+          fd.sw[key] = !fd.sw[key];
+          redrawNow();
+          return { handled: true, ok: true };
         }
         const o = (overrides[id] = overrides[id] || {});
         if (c.it.t === 'toggle' || c.it.t === 'guard') o.on = !(o.on ?? c.it.on ?? false);
@@ -411,6 +458,29 @@ export function buildFlightDeck(systems) {
         }
         redrawNow();
         return { handled: true, ok: true };
+      };
+    }
+    // custom-drawn panels can declare click / scroll regions (normalized canvas coords, y from the top)
+    if (opts.regions) {
+      const find = (uv) => {
+        if (!uv) return null;
+        const px = uv.x, py = 1 - uv.y;
+        return opts.regions.find((r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) || null;
+      };
+      m.userData.hint = (uv) => find(uv)?.hint || null;
+      m.userData.interact = ({ uv, shift }) => {
+        const r = find(uv);
+        if (!r?.act) return null;
+        const res = r.act(shift) || {};
+        redrawNow();
+        return { handled: true, ok: res.ok !== false, message: res.message };
+      };
+      m.userData.wheel = ({ uv, dir }) => {
+        const r = find(uv);
+        if (!r?.wheel) return null;
+        r.wheel(dir);
+        redrawNow();
+        return { handled: true };
       };
     }
     if (opts.state) {
@@ -431,6 +501,8 @@ export function buildFlightDeck(systems) {
         if (it.key === 'apuGen') return { ...out, lit: !!state.apuGen };
         if (it.key === 'apu') return { ...out, angle: state.apu ? 0.7 : -0.7 };
         if (it.key.startsWith('light.')) return { ...out, on: !!state[it.key] };
+        if (it.key.startsWith('sw.')) return { ...out, on: !!state.sw?.[it.key] };
+        if (it.key.startsWith('ann.')) return { ...out, lit: !!state.ann?.[it.key.slice(4)] };
         return out;
       })),
     };
@@ -438,6 +510,94 @@ export function buildFlightDeck(systems) {
   const L = (id) => LAYOUTS[id];
   const sysState = () => systems.state;
   const ann = () => systems.annunciators();
+
+  // ---- cockpit-only state: MCP settings, overhead switch positions, master caution
+  const fd = {
+    mcp: { spd: 250, hdg: 10, alt: 10000, vs: 0, crs: 10, modes: [], cmdA: false, cmdB: false, at: false, fdL: true, fdR: true },
+    sw: {
+      'sw.fuel.aft1': true, 'sw.fuel.fwd1': true, 'sw.fuel.ctrl': false, 'sw.fuel.ctrr': false, 'sw.fuel.fwd2': true, 'sw.fuel.aft2': true,
+      'sw.hyd.elec2': true, 'sw.hyd.eng1': true, 'sw.hyd.eng2': true, 'sw.hyd.elec1': true,
+      'sw.fc.a': true, 'sw.fc.b': true,
+    },
+    ack: null, recallUntil: 0, t: 0,
+  };
+  // Simplified logic for study: engines are treated as running in flight and stopped on the ground.
+  function computeAnn() {
+    const s = fd.sw;
+    const running = !systems.state.onGround;
+    const sysA = s['sw.hyd.elec2'] || (s['sw.hyd.eng1'] && running);
+    const sysB = s['sw.hyd.elec1'] || (s['sw.hyd.eng2'] && running);
+    const a = {
+      'fuel.aft1': !s['sw.fuel.aft1'], 'fuel.fwd1': !s['sw.fuel.fwd1'], 'fuel.fwd2': !s['sw.fuel.fwd2'], 'fuel.aft2': !s['sw.fuel.aft2'],
+      'fuel.ctrl': false, 'fuel.ctrr': false, // center pump lights stay dark with no center fuel modelled
+      'hyd.elec2': !s['sw.hyd.elec2'], 'hyd.elec1': !s['sw.hyd.elec1'],
+      'hyd.eng1': !s['sw.hyd.eng1'] || !running, 'hyd.eng2': !s['sw.hyd.eng2'] || !running,
+      'fc.a': !s['sw.fc.a'] || !sysA, 'fc.b': !s['sw.fc.b'] || !sysB,
+    };
+    const cats = new Set();
+    if (['fuel.aft1', 'fuel.fwd1', 'fuel.fwd2', 'fuel.aft2'].some((k) => a[k])) cats.add('FUEL');
+    if (['hyd.elec2', 'hyd.elec1', 'hyd.eng1', 'hyd.eng2'].some((k) => a[k])) cats.add('HYD');
+    if (a['fc.a'] || a['fc.b']) cats.add('FLT CONT');
+    return { ann: a, cats };
+  }
+  function cautionState() {
+    const { cats } = computeAnn();
+    if (!fd.ack) fd.ack = new Set(cats); // cold cockpit: existing cautions start acknowledged
+    for (const c of [...fd.ack]) if (!cats.has(c)) fd.ack.delete(c); // cleared cautions re-arm
+    const fresh = [...cats].filter((c) => !fd.ack.has(c));
+    const recall = fd.t < fd.recallUntil;
+    return { mc: fresh.length > 0 || (recall && cats.size > 0), six: recall ? [...cats] : fresh };
+  }
+  const panelState = () => ({ ...systems.state, apuGen: ann().apuGen.state !== 'off', sw: { ...fd.sw }, ann: computeAnn().ann });
+
+  // ---- MCP behaviour
+  const MCP_GROUPS = [['N1', 'SPEED'], ['VNAV', 'LVL CHG', 'ALT HLD', 'V/S'], ['HDG SEL', 'LNAV', 'VOR LOC', 'APP']];
+  const STEP = { spd: 5, hdg: 5, alt: 500, vs: 100, crs: 5 };
+  function adjust(id, dir) {
+    const m = fd.mcp;
+    if (id === 'hdg' || id === 'crs') m[id] = ((m[id] + dir * STEP[id]) % 360 + 360) % 360 || 360;
+    else if (id === 'spd') m.spd = Math.max(100, Math.min(340, m.spd + dir * STEP.spd));
+    else if (id === 'alt') m.alt = Math.max(0, Math.min(41000, m.alt + dir * STEP.alt));
+    else if (id === 'vs') m.vs = Math.max(-6000, Math.min(6000, m.vs + dir * STEP.vs));
+  }
+  function pressMode(mode) {
+    const m = fd.mcp;
+    if (mode === 'CMD A' || mode === 'CMD B') {
+      const k = mode === 'CMD A' ? 'cmdA' : 'cmdB', other = mode === 'CMD A' ? 'cmdB' : 'cmdA';
+      if (!m[k] && m[other] && !m.modes.includes('APP')) {
+        return { ok: false, message: 'Both autopilots engage together only for an approach. Arm APP first, then engage the second autopilot.' };
+      }
+      m[k] = !m[k];
+      return {};
+    }
+    if (m.modes.includes(mode)) { m.modes = m.modes.filter((x) => x !== mode); return {}; }
+    const group = MCP_GROUPS.find((g) => g.includes(mode)) || [];
+    m.modes = m.modes.filter((x) => !group.includes(x));
+    if (mode === 'APP') m.modes = m.modes.filter((x) => !MCP_GROUPS[1].includes(x)); // APP flies the glideslope
+    m.modes.push(mode);
+    return {};
+  }
+  function fma() {
+    const m = fd.mcp, has = (x) => m.modes.includes(x);
+    const thrust = !m.at ? '' : has('N1') || has('LVL CHG') ? 'N1' : has('SPEED') ? 'MCP SPD' : has('VNAV') ? 'FMC SPD' : 'ARM';
+    const roll = has('HDG SEL') ? 'HDG SEL' : has('LNAV') ? 'LNAV' : has('VOR LOC') || has('APP') ? 'VOR/LOC' : '';
+    const pitch = has('VNAV') ? 'VNAV PTH' : has('LVL CHG') ? 'MCP SPD' : has('ALT HLD') ? 'ALT HOLD' : has('V/S') ? 'V/S' : has('APP') ? 'G/S' : '';
+    return [thrust, roll, pitch];
+  }
+  const mcpRegions = [
+    ...MCP.windows.map((w) => ({
+      x: w.x, y: MCP.winY - 0.12, w: w.w, h: MCP.winH + 0.12,
+      hint: `${w.label} · click +, Shift+click −, or scroll`,
+      act: (shift) => adjust(w.id, shift ? -1 : 1), wheel: (dir) => adjust(w.id, dir),
+    })),
+    ...MCP.buttons.map(([t, x]) => ({ x, y: MCP.btnY, w: MCP.btnW, h: MCP.btnH, hint: `${t} · click to ${t.startsWith('CMD') ? 'engage / disengage' : 'select'}`, act: () => pressMode(t) })),
+    ...MCP.toggles.map(([key, lab, x]) => ({ x: x - 0.022, y: 0.55, w: 0.044, h: 0.42, hint: `${lab} switch · click to toggle`, act: () => { fd.mcp[key] = !fd.mcp[key]; } })),
+  ];
+  const mcRegions = [
+    { x: 0.54, y: 0.08, w: 0.38, h: 0.38, hint: 'MASTER CAUTION · click to reset', act: () => { fd.ack = new Set(computeAnn().cats); fd.recallUntil = 0; } },
+    { x: 0.08, y: 0.08, w: 0.38, h: 0.38, hint: 'FIRE WARN · lit with a fire warning; press to silence the bell', act: () => ({}) },
+    { x: 0.05, y: 0.54, w: 0.92, h: 0.42, hint: 'System annunciator · click to recall cautions', act: () => { fd.recallUntil = fd.t + 2.5; } },
+  ];
 
   // ---- main instrument panel (P1 / P2 / P3)
   const mainPanel = facing(V(0.88, 0.8, 0), V(-1, 0.2, 0));
@@ -447,11 +607,15 @@ export function buildFlightDeck(systems) {
   const pfdState = () => {
     const st = sysState();
     const air = !st.onGround;
-    return { pitch: air ? 2.5 : 0, bank: air ? -st.roll * 18 : 0, speed: air ? 250 : 0, alt: air ? 10000 : 0, hdg: 10, fma: air ? ['MCP SPD', 'LNAV', 'VNAV PTH'] : ['', '', ''], cmd: air };
+    const m = fd.mcp;
+    return {
+      pitch: air ? 2.5 : 0, bank: air ? -st.roll * 18 : 0, speed: air ? 250 : 0, alt: air ? 10000 : 0, hdg: 10,
+      fma: fma(), cmd: m.cmdA || m.cmdB ? 'CMD' : m.fdL || m.fdR ? 'FD' : '', selSpd: m.spd, selAlt: m.alt,
+    };
   };
   for (const s of [-1, 1]) {
     zone(mainPanel, 'fd-pfd', 0.205, 0.205, s * 0.71, 0.03, drawPFD, { screen: true, state: pfdState, side: s < 0 ? 'L' : 'R' });
-    zone(mainPanel, 'fd-nd', 0.205, 0.205, s * 0.475, 0.03, drawND, { screen: true, side: s < 0 ? 'L' : 'R' });
+    zone(mainPanel, 'fd-nd', 0.205, 0.205, s * 0.475, 0.03, drawND, { screen: true, side: s < 0 ? 'L' : 'R', state: () => ({ hdg: fd.mcp.hdg }) });
   }
   zone(mainPanel, 'fd-upper-du', 0.205, 0.205, 0.0, 0.05, drawEngines, {
     screen: true,
@@ -475,14 +639,19 @@ export function buildFlightDeck(systems) {
   }
 
   // ---- glareshield (P7)
-  box(0.38, 0.06, 2.04, mats.glare, [0.8, 1.04, 0]);
+  box(0.36, 0.06, 2.04, mats.glare, [0.89, 1.07, 0]); // glareshield top, kept behind the slanted MCP face
   const glare = facing(V(0.63, 1.01, 0), V(-1, 0.75, 0));
   const glareFace = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.12), mats.glare);
   glare.add(glareFace);
-  zone(glare, 'fd-mcp', 0.66, 0.1, 0, 0, drawMCP, { screen: false });
+  zone(glare, 'fd-mcp', 0.66, 0.1, 0, 0, drawMCP, {
+    state: () => ({ ...fd.mcp, modes: [...fd.mcp.modes] }), regions: mcpRegions,
+  });
   for (const s of [-1, 1]) {
-    zone(glare, 'fd-efis-panels', 0.2, 0.1, s * 0.47, 0, L('fd-efis-panels'), { side: s < 0 ? 'L' : 'R' });
-    zone(glare, 'fd-master-caution', 0.14, 0.1, s * 0.66, 0, drawMasterCaution, { side: s < 0 ? 'L' : 'R' });
+    const side = s < 0 ? 'L' : 'R';
+    zone(glare, 'fd-efis-panels', 0.2, 0.1, s * 0.47, 0, L('fd-efis-panels'), { side });
+    zone(glare, 'fd-master-caution', 0.14, 0.1, s * 0.66, 0, drawMasterCaution, {
+      side, regions: mcRegions, state: () => ({ ...cautionState(), side }),
+    });
   }
 
   // ---- forward overhead (P5)
@@ -493,7 +662,10 @@ export function buildFlightDeck(systems) {
   const yTop = 0.34, yBot = -0.2;
   const place = (id, ci, y1, y2, layoutId = id) =>
     zone(ovh, id, cw - 0.006, (y2 - y1) - 0.006, col(ci), (y1 + y2) / 2, L(layoutId), {
-      state: LAYOUTS[layoutId].rows.some((r) => r.some((it) => it.key)) ? () => ({ apu: !!sysState().apu, apuGen: ann().apuGen.state !== 'off' }) : null,
+      state: LAYOUTS[layoutId].rows.some((r) => r.some((it) => it.key)) ? () => {
+        const p = panelState();
+        return { apu: !!p.apu, apuGen: p.apuGen, sw: p.sw, ann: p.ann };
+      } : null,
     });
   place('fd-flight-controls', 0, 0.06, yTop);
   place('fd-nav-displays', 0, -0.06, 0.06);
@@ -686,6 +858,7 @@ export function buildFlightDeck(systems) {
   const cur = { flap: 0, sb: 0.12, gear: -0.04, rev: 0, stab: 5, roll: 0, pitch: 0, yaw: 0 };
   const approach = (a, b, k) => a + (b - a) * k;
   function update(dt) {
+    fd.t += dt;
     const st = systems.state;
     const k = 1 - Math.exp(-dt * 8);
     const fi = Math.max(0, FLAP_DETENTS.indexOf(st.flapLever));

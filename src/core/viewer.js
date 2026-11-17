@@ -85,6 +85,15 @@ export class Viewer {
     el.addEventListener('pointerup', (e) => this._pointerUp(e));
     el.addEventListener('pointerleave', () => this._setHover(null));
     el.addEventListener('wheel', () => this._cancelFlight(), { passive: true });
+    // Scroll over a control that accepts the wheel (e.g. an MCP knob) turns it instead of zooming.
+    container.addEventListener('wheel', (e) => {
+      if (e.target !== el) return;
+      const hit = this._hit(e.clientX, e.clientY);
+      const wheel = hit?.object.userData.wheel;
+      if (!wheel) return;
+      const r = wheel({ uv: hit.uv, dir: e.deltaY < 0 ? 1 : -1 });
+      if (r?.handled) { e.preventDefault(); e.stopPropagation(); }
+    }, { capture: true, passive: false });
 
     // overlay layers
     this.markerLayer = document.createElement('div');

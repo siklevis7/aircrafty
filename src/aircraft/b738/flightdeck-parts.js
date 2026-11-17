@@ -78,7 +78,11 @@ export const fdParts = [
     id: 'fd-hydraulics', category: 'fd-overhead', name: 'Hydraulic Pumps', where: 'Forward overhead · third column',
     what: 'The four main hydraulic pumps.',
     how: 'From left to right: ELEC 2 (system A electric pump), ENG 1 (system A engine-driven pump), ENG 2 (system B engine-driven pump), ELEC 1 (system B electric pump). Amber LOW PRESSURE and OVERHEAT lights.',
-    notes: ['The electric pumps are crossed: generator 2 powers system A\'s electric pump and generator 1 powers system B\'s.', 'The engine-driven pumps are normally left ON.'],
+    notes: [
+      'The electric pumps are crossed: generator 2 powers system A\'s electric pump and generator 1 powers system B\'s.',
+      'The engine-driven pumps are normally left ON.',
+      'Live in 3D: on the ground the engine pumps show LOW PRESSURE because the engines aren\'t running. Switch both system A pumps off and FLT CONTROL A LOW PRESSURE lights too.',
+    ],
     view: [-0.3, -1, -0.05],
   },
   {
@@ -146,7 +150,11 @@ export const fdParts = [
     id: 'fd-mcp', category: 'fd-glareshield', name: 'Mode Control Panel (MCP)', where: 'Glareshield · center',
     what: 'The main interface to the autopilot, flight directors and autothrottle.',
     how: 'Course selectors, F/D switches, A/T ARM, and modes: N1, SPEED, LVL CHG, VNAV, HDG SEL, LNAV, VOR LOC, APP, ALT HOLD, V/S. Windows set IAS/MACH, heading, altitude and vertical speed. Autopilot engage buttons CMD A, CMD B and CWS A/B, plus the disengage bar.',
-    notes: ['Active modes appear in the flight mode annunciations at the top of each PFD.', 'Two autopilots engaged together (CMD A + B) only for an autoland approach.'],
+    notes: [
+      'Active modes appear in the flight mode annunciations at the top of each PFD.',
+      'Both autopilots (CMD A + B) engage together only for an approach in APP mode.',
+      'Try it in 3D: click or scroll the windows to set speed, heading and altitude, and press the mode buttons. The PFD modes, speed and altitude bugs and the ND heading bug follow.',
+    ],
     view: [-1, 0.2, 0],
   },
   {
@@ -159,8 +167,8 @@ export const fdParts = [
   {
     id: 'fd-master-caution', category: 'fd-glareshield', name: 'Fire Warning & Master Caution', where: 'Glareshield · outboard',
     what: 'The attention-getters. FIRE WARN (red) and MASTER CAUTION (amber) on each side, with the system annunciator panels.',
-    how: 'Pressing FIRE WARN silences the fire bell. Pressing MASTER CAUTION resets it and shows which system the six-pack annunciator has flagged (for example FLT CONT, ELEC, FUEL, HYD, ENG, OVHT/DET, ANTI-ICE, DOORS). Pressing an annunciator panel recalls all current cautions.',
-    notes: [],
+    how: 'A new caution lights MASTER CAUTION and the matching system annunciator (the six-pack): FLT CONT, IRS, FUEL, ELEC, APU, OVHT/DET on the left, ANTI-ICE, HYD, DOORS, ENG, OVERHEAD, AIR COND on the right. Pressing MASTER CAUTION resets both. Pressing a six-pack recalls all current cautions. Pressing FIRE WARN silences the fire bell.',
+    notes: ['Try it in 3D: switch a fuel or hydraulic pump OFF on the overhead and watch LOW PRESSURE, MASTER CAUTION and FUEL or HYD light up. Then reset and recall.'],
     view: [-1, 0.25, 0.3],
   },
 
