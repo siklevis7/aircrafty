@@ -448,6 +448,7 @@ export const meta = {
   name: 'Boeing 737-800',
   family: '737 Next Generation',
   short: '737-800 NG',
+  disclaimer: "Study aid only · Not affiliated with or endorsed by Boeing · Always use your operator's FCOM, FCTM and QRH",
   specs: [
     ['Length', '39.5 m'],
     ['Wingspan', '35.8 m (winglets)'],

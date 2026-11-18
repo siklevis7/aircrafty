@@ -45,8 +45,16 @@ async function boot() {
   const acId = store.get('aircraft', 'b738');
   select.value = getAircraft(acId).id;
 
+  select.addEventListener('change', () => {
+    if (!select.value || select.value === store.get('aircraft', 'b738')) return;
+    store.set('aircraft', select.value);
+    location.reload();
+  });
+
   const ac = await getAircraft(acId).load();
+  document.body.dataset.aircraft = ac.meta.id;
   $('#ac-name').textContent = ac.meta.name;
+  if (ac.meta.disclaimer) $('.disclaimer').textContent = ac.meta.disclaimer;
   $('#specs').innerHTML = ac.meta.specs.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
 
   viewer = new Viewer($('#stage'), {
@@ -285,6 +293,7 @@ async function boot() {
         if (window.innerWidth <= 820) document.body.classList.remove('sidebar-collapsed');
       } else {
         dockEl.classList.remove('is-collapsed');
+        $('#ac-family').textContent = ds.family;
         index.refresh();
         if (prev !== 'explore' && prev !== 'flightdeck') viewer.setView(ac.camera.home);
       }

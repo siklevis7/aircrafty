@@ -7,6 +7,7 @@ export const aircraftRegistry = [
     family: '737 Next Generation',
     load: () => import('./b738/index.js').then((m) => m.default),
   },
+  { id: 'da42', name: 'Diamond DA42', family: 'DA42 Twin Star', load: () => import('./da42/index.js').then((m) => m.default) },
 ];
 
 export const getAircraft = (id) => aircraftRegistry.find((a) => a.id === id) || aircraftRegistry[0];
