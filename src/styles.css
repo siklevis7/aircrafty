@@ -481,6 +481,26 @@ body[data-mode='failures'] .specs { display: none; }
 .fail-item-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex: none; }
 .fail-item.is-active .fail-item-dot { background: var(--ann-amber); border-color: var(--ann-amber); }
 
+/* ------------------------------------------------------------------ training mode */
+body[data-mode='training'] .side-head,
+body[data-mode='training'] .index,
+body[data-mode='training'] .specs { display: none; }
+.training {
+  position: absolute; inset: 0; z-index: 2; overflow: auto;
+  background:
+    linear-gradient(var(--paper-line) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, var(--paper-line) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--bg);
+}
+.training[hidden] { display: none; }
+.trainer-host { min-height: 100%; position: relative; }
+.trainer-error { padding: 24px; color: var(--ann-red); }
+.train-item { display: grid; gap: 3px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; padding: 9px 11px; color: var(--ink-2); transition: border-color 0.15s; }
+.train-item b { font: 700 14px/1.15 var(--font-display); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink); }
+.train-item span { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.train-item:hover { border-color: var(--accent); }
+.train-item.is-active { border-color: var(--accent); background: var(--accent-soft); }
+
 /* route pins on the ground */
 .route-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
 .route-pin {
@@ -497,16 +517,22 @@ body[data-mode='failures'] .specs { display: none; }
 /* ------------------------------------------------------------------ systems schematics */
 body[data-mode='systems'] .viewer-canvas,
 body[data-mode='failures'] .viewer-canvas,
+body[data-mode='training'] .viewer-canvas,
 body[data-mode='systems'] .marker-layer,
 body[data-mode='failures'] .marker-layer,
+body[data-mode='training'] .marker-layer,
 body[data-mode='systems'] .route-layer,
 body[data-mode='failures'] .route-layer,
+body[data-mode='training'] .route-layer,
 body[data-mode='systems'] .stage-title,
 body[data-mode='failures'] .stage-title,
+body[data-mode='training'] .stage-title,
 body[data-mode='systems'] .view-tools,
 body[data-mode='failures'] .view-tools,
+body[data-mode='training'] .view-tools,
 body[data-mode='systems'] .dock,
-body[data-mode='failures'] .dock { display: none; }
+body[data-mode='failures'] .dock,
+body[data-mode='training'] .dock { display: none; }
 .schem {
   position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; gap: 10px;
   padding: 16px 20px 30px; overflow: hidden;
@@ -546,6 +572,11 @@ body.has-selection .schem { padding-right: calc(var(--info-w) + 36px); }
 .schem-svg .z-elec { --c: #2bb673; }
 .schem-svg .z-fuel { --c: #e3a008; }
 .schem-svg .z-bleed { --c: #1fb2d6; }
+.schem-svg .z-fire { --c: #e5484d; }
+.schem-svg .z-press { --c: #4c8dff; }
+.schem-svg .z-oxy { --c: #12b5a0; }
+.schem-svg .z-ice { --c: #5fc6ee; }
+.schem-svg .z-gear { --c: #d99a1e; }
 .schem-svg .ln { fill: none; stroke: var(--line-strong); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; transition: stroke 0.3s; }
 .schem-svg .ln.is-live { stroke: var(--c); stroke-width: 5; stroke-dasharray: 12 9; animation: schem-flow 0.9s linear infinite; }
 .schem-svg .ln-feed { stroke-dasharray: 3 6; }

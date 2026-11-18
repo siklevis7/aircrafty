@@ -1,8 +1,13 @@
 // Aircraft-agnostic 3D viewer: scene, camera, picking, highlighting,
 // camera flights, isolate mode and hotspot markers.
+// Rendering: procedural sky IBL + apron outdoors, studio IBL indoors, soft shadows and a
+// post-processing chain (AO, bloom, tone mapping) with a quality switch (setQuality).
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { createSkyEnvironments } from './render-env.js';
+import { createApron } from './render-ground.js';
+import { createPost } from './render-post.js';
 
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
@@ -35,10 +40,16 @@ export class Viewer {
 
     this.scene = new THREE.Scene();
     const pmrem = new THREE.PMREMGenerator(r);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.roomEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    this.scene.environment = this.roomEnv;
     this.fog = new THREE.Fog(0xe9ebe4, 90, 260);
     this.scene.fog = this.fog;
     this.envGround = true;
+    this.outdoor = true;
+    this.dark = false;
+    this.lightScale = 1;
+    this.themeBg = new THREE.Color('#e7e9e3');
 
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.5, 800);
     this.camera.position.set(70, 32, -80);
@@ -63,16 +74,21 @@ export class Viewer {
     sun.shadow.normalBias = 0.03;
     this.scene.add(sun);
 
-    // ground
-    this.ground = new THREE.Mesh(new THREE.CircleGeometry(220, 64), new THREE.ShadowMaterial({ opacity: 0.18 }));
-    this.ground.rotation.x = -Math.PI / 2;
-    this.ground.receiveShadow = true;
+    // outdoor environment: procedural sky (day for the light theme, blue hour for the dark theme)
+    this.skyEnv = createSkyEnvironments(r, sun.position);
+
+    // quality: 'high' (post-processing, 4k shadows) or 'low' (direct render); 'auto' picks and can fall back
+    this.qualityMode = 'auto';
+    this.quality = this._detectQuality();
+    this._perf = { frames: 0, time: 0, warm: 0, checked: false };
+
+    // ground: a concrete apron with stand markings (replaces the old grid)
+    this.apron = createApron(r, { hi: this.quality === 'high' });
+    this.ground = this.apron.group;
     this.scene.add(this.ground);
+    // kept for backward compatibility (no longer shown)
     this.grid = new THREE.GridHelper(240, 120, 0x9aa3ab, 0xc9ced2);
-    this.grid.position.y = 0.002;
-    this.grid.material.transparent = true;
-    this.grid.material.opacity = 0.55;
-    this.scene.add(this.grid);
+    this.grid.visible = false;
 
     // picking
     this.raycaster = new THREE.Raycaster();
@@ -106,6 +122,8 @@ export class Viewer {
     this.tooltip.className = 'tooltip';
     container.appendChild(this.tooltip);
 
+    this.post = null;
+    this._applyQuality();
     new ResizeObserver(() => this._resize()).observe(container);
     this._resize();
     this.clock = new THREE.Clock();
@@ -127,6 +145,8 @@ export class Viewer {
     this.highlightSet = new Set();
     this._applyCameraConfig(cameraCfg || {});
     root.updateMatrixWorld(true);
+    const extraOccluders = [];
+    root.traverse((o) => { if (o.isMesh && o.userData.occluder && !o.userData.partId) extraOccluders.push(o); });
     root.traverse((o) => {
       if (!(o.isMesh && o.userData.partId)) return;
       if (!o.userData._ownMaterial) {
@@ -144,6 +164,8 @@ export class Viewer {
       this.partMeshes.get(id).push(o);
       this.pickables.push(o);
     });
+    // decorative meshes can opt in to hiding hotspot markers without being clickable
+    this.occluders = extraOccluders.length ? [...this.pickables, ...extraOccluders] : null;
     this._buildMarkers();
   }
 
@@ -152,6 +174,7 @@ export class Viewer {
   _applyCameraConfig(cfg) {
     const env = cfg.env || {};
     this.envGround = env.ground !== false;
+    this.outdoor = this.envGround;
     this.scene.fog = env.fog === false ? null : this.fog;
     const lim = { minDistance: 2.5, maxDistance: 140, near: 0.5, fov: 38, ...(cfg.limits || {}) };
     this.controls.minDistance = lim.minDistance;
@@ -163,18 +186,109 @@ export class Viewer {
     this.bounds = cfg.bounds ? { min: new THREE.Vector3(...cfg.bounds.min), max: new THREE.Vector3(...cfg.bounds.max) } : null;
     this.focusCfg = { scale: 1.85, add: 3, min: 5, max: 66, ...(cfg.focus || {}) };
     this.flight = null;
+    // Ambient occlusion radius from the scene scale: ~0.95 m outdoors (140 m orbit), ~0.12 m in the
+    // flight deck (2.4 m), ~0.2 m in the cabin (6 m).
+    this.aoRadius = THREE.MathUtils.clamp(0.08 * Math.sqrt(lim.maxDistance), 0.05, 1.2);
+    this._applyEnvironment();
+  }
+
+  // ------------------------------------------------------------------ rendering setup
+  _detectQuality() {
+    const small = Math.min(window.innerWidth, window.innerHeight) < 600 || window.innerWidth <= 820;
+    let weak = (navigator.hardwareConcurrency || 8) <= 2;
+    try {
+      const gl = this.renderer.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+      if (/swiftshader|llvmpipe|software|basic render|mali-4/i.test(name)) weak = true;
+    } catch { /* ignore */ }
+    return small || weak ? 'low' : 'high';
+  }
+
+  /**
+   * 'high' (AO + bloom + 4k shadows) | 'medium' (bloom, no AO) | 'low' (direct render) | 'auto'.
+   * Auto picks from the device and steps down (high → medium → low) while the frame rate stays poor.
+   */
+  setQuality(q = 'auto') {
+    this.qualityMode = ['high', 'medium', 'low'].includes(q) ? q : 'auto';
+    this.quality = this.qualityMode === 'auto' ? this._detectQuality() : this.qualityMode;
+    this._perf = { frames: 0, time: 0, warm: 0, checked: this.qualityMode !== 'auto' };
+    this._applyQuality();
+  }
+
+  getQuality() { return { mode: this.qualityMode, active: this.quality }; }
+
+  _applyQuality() {
+    const high = this.quality !== 'low';
+    const r = this.renderer;
+    r.setPixelRatio(Math.min(window.devicePixelRatio, this.quality === 'high' ? 1.75 : this.quality === 'medium' ? 1.5 : 1.25));
+    const ms = this.quality === 'high' ? 4096 : 2048;
+    if (this.sun.shadow.mapSize.x !== ms) {
+      this.sun.shadow.mapSize.set(ms, ms);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    if (high && !this.post) this.post = createPost(r, this.scene, this.camera);
+    if (!high && this.post) { this.post.dispose(); this.post = null; }
+    this._applyEnvironment();
+    this._resize();
+  }
+
+  /** Sky / background / IBL / AO tuning for the current scene (outdoor vs interior) and theme. */
+  _applyEnvironment() {
+    const s = this.scene;
+    const k = this.lightScale;
+    if (this.outdoor) {
+      const sky = this.dark ? this.skyEnv.dusk : this.skyEnv.day;
+      s.environment = sky.env;
+      s.background = sky.bg;
+      s.backgroundIntensity = this.dark ? 0.55 : 0.24;
+      s.backgroundBlurriness = 0;
+      // the sky carries most of the ambient light; keep a little hemisphere fill for the belly
+      this._base = this.dark ? { hemi: 0.5, sun: 2.3, env: 1.6 } : { hemi: 0.18, sun: 2.9, env: 0.62 };
+      this.fog.color.set(this.dark ? '#1b2533' : '#c9d3dc');
+      this.fog.near = 140; this.fog.far = 430;
+    } else {
+      s.environment = this.roomEnv;
+      s.background = this.themeBg;
+      s.backgroundIntensity = 1;
+      this._base = { hemi: 0.55, sun: 2.6, env: 1 };
+      this.fog.color.copy(this.themeFog || this.themeBg);
+      this.fog.near = 90; this.fog.far = 260;
+    }
+    this.hemi.intensity = this._base.hemi * k;
+    this.sun.intensity = this._base.sun * k;
+    s.environmentIntensity = Math.max(0.15, k) * this._base.env;
+    const sh = this.sun.shadow;
+    sh.bias = this.outdoor ? -0.00025 : -0.0004;
+    sh.normalBias = this.outdoor ? 0.025 : 0.03;
+    if (this.post) {
+      this.post.setScale(this.aoRadius || 0.9);
+      // bloom picks up light bulbs / annunciators only (HDR values above the threshold)
+      this.post.setBloom(this.outdoor ? { strength: this.dark ? 0.45 : 0.25, threshold: this.dark ? 1.25 : 1.7, radius: 0.45 }
+        : { strength: 0.16, threshold: 1.6, radius: 0.35 });
+      this._updateAO();
+    }
+  }
+
+  _updateAO() {
+    // ghosted (isolate) meshes are transparent; AO is switched off meanwhile so they leave no contact shadow
+    if (this.post) this.post.ao.enabled = this.quality === 'high' && !(this.isolate && this.selectedId);
   }
 
   setTheme({ fog, gridMajor, gridMinor, gridOpacity, shadow, accent, hover, exposure }) {
-    this.fog.color.set(fog);
+    this.themeFog = new THREE.Color(fog);
+    this.themeBg.set(fog);
+    this.dark = this.themeFog.getHSL({}).l < 0.3;
+    // legacy grid kept (hidden) so callers relying on viewer.grid keep working
     this.grid.material.dispose();
-    this.scene.remove(this.grid);
     this.grid = new THREE.GridHelper(240, 120, gridMajor, gridMinor);
-    this.grid.position.y = 0.002;
     this.grid.material.transparent = true;
     this.grid.material.opacity = gridOpacity;
-    this.scene.add(this.grid);
-    this.ground.material.opacity = shadow;
+    this.grid.visible = false;
+    void shadow;
+    this.apron.setTheme(this.dark);
+    this._applyEnvironment();
     this.colors.accent.set(accent);
     this.colors.hover.set(hover);
     if (this.routeLine) this.routeLine.material.color.set(accent);
@@ -188,11 +302,12 @@ export class Viewer {
     this.selectedId = id;
     this._refreshHighlights(true, prev);
     this._applyIsolate();
+    this._updateAO();
     if (id && focus) this.focusPart(id);
     this.markers?.forEach((m, pid) => m.el.classList.toggle('is-selected', pid === id));
   }
 
-  setIsolate(on) { this.isolate = on; this._applyIsolate(); }
+  setIsolate(on) { this.isolate = on; this._applyIsolate(); this._updateAO(); }
   setHotspots(on) { this.showHotspots = on; this.markerLayer.classList.toggle('is-hidden', !on); }
 
   focusPart(id) {
@@ -306,9 +421,8 @@ export class Viewer {
 
   /** Scale the global lights (1 = normal daylight). Used for night scenes. */
   setLightScale(k) {
-    this.hemi.intensity = 0.55 * k;
-    this.sun.intensity = 2.6 * k;
-    this.scene.environmentIntensity = Math.max(0.15, k);
+    this.lightScale = k;
+    this._applyEnvironment();
   }
 
   /** Keep the visual center clear of overlay panels (px covered on the right / bottom). */
@@ -318,6 +432,7 @@ export class Viewer {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
+    this.post?.setSize(w, h, this.renderer.getPixelRatio());
     this.camera.aspect = w / h;
     this._applyInsets();
   }
@@ -493,7 +608,7 @@ export class Viewer {
         const dist = dir.length();
         this.raycaster.set(camPos, dir.normalize());
         this.raycaster.far = dist;
-        const hit = this.raycaster.intersectObjects(this.pickables, false).find((x) => x.object.visible && x.object.material.opacity > 0.5);
+        const hit = this.raycaster.intersectObjects(this.occluders || this.pickables, false).find((x) => x.object.visible && x.object.material.opacity > 0.5);
         m.occluded = !!hit && hit.distance < dist - 0.25 && hit.object.userData.partId !== id;
         this.raycaster.far = Infinity;
       }
@@ -541,11 +656,31 @@ export class Viewer {
     this.controls.update();
     if (this.bounds) this.camera.position.clamp(this.bounds.min, this.bounds.max);
     const above = this.camera.position.y > 0.05 && this.envGround;
-    this.grid.visible = above;
     this.ground.visible = above;
     this._paintHighlights(now);
     this._updateMarkers(now);
     this._updateRoute();
-    this.renderer.render(this.scene, this.camera);
+    if (this.post) this.post.render(dt);
+    else this.renderer.render(this.scene, this.camera);
+    this._watchPerf(dt);
+  }
+
+  // Auto quality: after a warm-up, if the high-quality chain averages under ~28 fps for 4 s, drop to low.
+  _watchPerf(dt) {
+    const p = this._perf;
+    if (p.checked || this.qualityMode !== 'auto' || this.quality === 'low' || document.hidden) return;
+    if (p.warm < 3) { p.warm += dt; return; }
+    // a long gap means the page was throttled or stalled (hidden pane, tab switch): restart the window
+    if (dt > 0.2) { p.frames = 0; p.time = 0; return; }
+    p.frames++; p.time += dt;
+    if (p.time < 4) return;
+    const fps = p.frames / p.time;
+    if (fps < 28) {
+      const next = this.quality === 'high' ? 'medium' : 'low';
+      console.info('[viewer] ' + fps.toFixed(0) + ' fps at ' + this.quality + ' quality - switching to ' + next);
+      this.quality = next;
+      this._perf = { frames: 0, time: 0, warm: 0, checked: false };
+      this._applyQuality();
+    } else p.checked = true;
   }
 }

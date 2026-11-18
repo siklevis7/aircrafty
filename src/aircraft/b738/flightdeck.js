@@ -1,547 +1,600 @@
-// Procedural 737-800 flight deck. Local coordinates: floor at y = 0, +x forward,
+// Procedural 737-800 (NG) flight deck. Local coordinates: floor at y = 0, +x forward,
 // +z to the First Officer's side (right), captain at z ≈ -0.53.
 // Each clickable zone is a mesh with userData.partId matching flightdeck-parts.js.
+// Panels are painted canvases (albedo + additive glow layer) with real 3D toggles, guards and knobs
+// instanced on top; switches drive the shared systems controller (systems.set).
 import * as THREE from 'three';
-import { makeCanvas, canvasTexture, paintPanel, COLORS, drawLabel, rrect } from '../../core/panelcanvas.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { makeCanvas, canvasTexture, paintPanel, drawLabel, rrect } from '../../core/panelcanvas.js';
 import { FLAP_DETENTS } from './systems.js';
+import * as D from './flightdeck-displays.js';
+import {
+  makeMaterials, buildShell, buildGlareshield, createControlKit, buildSeat, buildColumn, buildPedals,
+  buildConsoles, buildTiller, buildCBPanel, buildDoor, buildOutside, bar,
+} from './flightdeck-geometry.js';
+import { paintSet } from './flightdeck-textures.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const PPM = 2400; // panel canvas resolution (px per metre)
+const PPM_DU = 3600; // display units
 
-// ---- overhead panel layouts --------------------------------------------------------
+// ---- layout item helpers -------------------------------------------------------------------
 const T = (label, extra = {}) => ({ t: 'toggle', label, ...extra });
 const G = (label, extra = {}) => ({ t: 'guard', label, ...extra });
 const K = (label, extra = {}) => ({ t: 'knob', label, ...extra });
 const A = (text, color = 'amber', extra = {}) => ({ t: 'annun', text, color, ...extra });
 const GA = (label, extra = {}) => ({ t: 'gauge', label, ...extra });
 const B = (text, extra = {}) => ({ t: 'button', text, ...extra });
+const SC = (text, extra = {}) => ({ t: 'screen', text, ...extra });
+const TX = (text, extra = {}) => ({ t: 'text', text, ...extra });
+const GAP = (w = 1) => ({ t: 'gap', w });
+// annunciator lit from panel().ann[...] (core and extension lights)
+const an = (k) => (S) => !!S.ann[k];
+const ONOFF = ['ON', 'OFF'];
 
+// ---- overhead and pedestal panel layouts -----------------------------------------------------
 const LAYOUTS = {
-  'fd-flight-controls': { title: 'FLIGHT CONTROL', rows: [[G('FLT CONTROL A', { key: 'sw.fc.a' }), G('FLT CONTROL B', { key: 'sw.fc.b' })], [A('LOW PRESS', 'amber', { key: 'ann.fc.a' }), A('LOW PRESS', 'amber', { key: 'ann.fc.b' })], [G('SPOILER A', { on: true }), G('SPOILER B', { on: true })], [G('ALTN FLAPS', { key: 'sw.altflaps' }), T('UP / DN')], [T('YAW DAMPER', { on: true }), A('YAW DAMPER')]] },
-  'fd-nav-displays': { title: 'NAVIGATION / DISPLAYS', rows: [[K('VHF NAV'), K('IRS'), K('FMC'), K('DISPLAYS'), K('CONTROL')]] },
-  'fd-fuel': { title: 'FUEL', rows: [[GA('FUEL TEMP'), A('VALVE\nOPEN', 'blue'), K('CROSSFEED', { key: 'sw.fuel.xfeed' }), A('VALVE\nOPEN', 'blue', { key: 'ann.fuel.xfeed' })], [T('AFT 1', { key: 'sw.fuel.aft1' }), T('FWD 1', { key: 'sw.fuel.fwd1' }), T('CTR L', { key: 'sw.fuel.ctrl' }), T('CTR R', { key: 'sw.fuel.ctrr' }), T('FWD 2', { key: 'sw.fuel.fwd2' }), T('AFT 2', { key: 'sw.fuel.aft2' })], [A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd1' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrl' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.ctrr' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.fwd2' }), A('LOW\nPRESS', 'amber', { key: 'ann.fuel.aft2' })]] },
-  'fd-electrical': { title: 'ELECTRICAL', rows: [[A('GEN 1\nDRIVE', 'amber', { key: 'ann.elec.drive1' }), GA('DC'), GA('AC'), A('GEN 2\nDRIVE', 'amber', { key: 'ann.elec.drive2' })], [K('DC SEL'), G('BAT', { key: 'sw.battery' }), K('AC SEL')], [A('TRANSFER\nBUS OFF', 'amber', { key: 'ann.elec.tbo1' }), A('SOURCE\nOFF'), A('TRANSFER\nBUS OFF', 'amber', { key: 'ann.elec.tbo2' })], [G('STANDBY\nPOWER', { key: 'sw.stbypower' }), T('GRD PWR', { key: 'act.elec.ext' }), T('BUS XFR', { key: 'sw.bustransfer' })], [T('GEN 1', { key: 'act.elec.gen1' }), T('APU GEN', { key: 'act.elec.apu' }), T('GEN 2', { key: 'act.elec.gen2' })]] },
-  'fd-apu': { title: 'APU', rows: [[GA('APU EGT'), A('MAINT', 'blue'), A('LOW OIL\nPRESS')], [A('FAULT'), A('OVER\nSPEED'), K('APU', { key: 'apu' })], [A('APU GEN\nOFF BUS', 'blue', { key: 'apuGen' })]] },
-  'fd-cabin-signs': { title: 'CABIN / EQUIP', rows: [[T('EQUIP COOL\nSUPPLY'), T('EQUIP COOL\nEXHAUST')], [G('EMER EXIT\nLIGHTS', { on: true }), A('NOT\nARMED')], [T('NO SMOKING', { on: true }), T('FASTEN BELTS', { on: true })], [B('ATTEND'), B('GRD CALL')]] },
-  'fd-window-probe-heat': { title: 'WINDOW / PROBE HEAT', rows: [[A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true }), A('ON', 'green', { lit: true })], [T('L SIDE', { on: true }), T('L FWD', { on: true }), T('R FWD', { on: true }), T('R SIDE', { on: true })], [T('PROBE A'), T('TEST'), T('PROBE B')], [A('CAPT\nPITOT'), A('L ELEV\nPITOT'), A('F/O\nPITOT'), A('TEMP\nPROBE')]] },
-  'fd-anti-ice': { title: 'ANTI-ICE', rows: [[A('WING\nANTI-ICE', 'blue', { key: 'ann.ai.wing' }), A('COWL\nANTI-ICE'), A('COWL\nANTI-ICE')], [T('WING', { key: 'sw.wingai' }), T('ENG 1'), T('ENG 2')]] },
-  'fd-hydraulics': { title: 'HYDRAULIC PUMPS', rows: [[A('OVER\nHEAT'), A('LOW\nPRESS'), A('LOW\nPRESS'), A('OVER\nHEAT')], [T('ELEC 2', { key: 'sw.hyd.elec2' }), T('ENG 1', { key: 'sw.hyd.eng1' }), T('ENG 2', { key: 'sw.hyd.eng2' }), T('ELEC 1', { key: 'sw.hyd.elec1' })], [A('LOW\nPRESS', 'amber', { key: 'ann.hyd.elec2' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.eng1' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.eng2' }), A('LOW\nPRESS', 'amber', { key: 'ann.hyd.elec1' })]] },
-  'fd-air-conditioning': { title: 'AIR CONDITIONING', rows: [[GA('TEMP'), K('TEMP SEL')], [K('CONT CAB'), K('FWD CAB'), K('AFT CAB')], [T('L RECIRC', { on: true }), T('R RECIRC', { on: true })]] },
-  'fd-bleed-air': { title: 'BLEED AIR', rows: [[A('L PACK', 'amber', { key: 'ann.pack.l' }), GA('DUCT PRESS'), A('DUAL\nBLEED', 'amber', { key: 'ann.bleed.dual' }), A('R PACK', 'amber', { key: 'ann.pack.r' })], [A('BLEED 1\nTRIP OFF', 'amber', { key: 'ann.bleed.trip1' }), A('WING-BODY\nOVHT'), A('BLEED 2\nTRIP OFF', 'amber', { key: 'ann.bleed.trip2' })], [T('L PACK', { key: 'sw.pack.l' }), K('ISOLATION', { key: 'sw.iso' }), T('R PACK', { key: 'sw.pack.r' })], [T('BLEED 1', { key: 'sw.bleed1' }), T('APU BLEED', { key: 'sw.apubleed' }), T('BLEED 2', { key: 'sw.bleed2' })]] },
-  'fd-pressurization': { title: 'PRESSURIZATION', rows: [[{ t: 'screen', text: '35000', label: 'FLT ALT' }, { t: 'screen', text: '00000', label: 'LAND ALT' }], [GA('VALVE'), K('MODE'), T('MAN')]] },
-  'fd-exterior-lights': { title: '', rows: [[T('L LANDING', { key: 'light.landing' }), T('R LANDING', { key: 'light.landing' }), T('L TURNOFF', { key: 'light.turnoff' }), T('R TURNOFF', { key: 'light.turnoff' }), T('TAXI', { key: 'light.taxi' })]] },
-  'fd-exterior-lights-2': { title: '', rows: [[T('LOGO', { key: 'light.logo' }), T('POSITION', { key: 'light.nav' }), T('STROBE', { key: 'light.strobe' }), T('ANTI COLL', { key: 'light.beacon' }), T('WING', { key: 'light.wing' })]] },
-  'fd-engine-start': { title: 'ENGINE START', rows: [[K('ENG 1', { angle: 0 }), K('IGN', { angle: 0 }), K('ENG 2', { angle: 0 })]] },
-  'fd-irs': { title: 'IRS', rows: [[A('ALIGN', 'white'), A('ON DC'), A('ALIGN', 'white'), A('ON DC')], [A('FAULT'), A('DC FAIL'), A('FAULT'), A('DC FAIL')], [K('L IRS', { angle: 0.5 }), K('R IRS', { angle: 0.5 })]] },
-  'fd-le-devices': { title: 'LE DEVICES', rows: [[A('', 'green', { key: 'le', i: 0 }), A('', 'green', { key: 'le', i: 1 }), A('', 'green', { key: 'le', i: 2 }), A('', 'green', { key: 'le', i: 3 }), A('', 'green', { key: 'le', i: 4 }), A('', 'green', { key: 'le', i: 5 })], [A('', 'green', { key: 'le', i: 6 }), A('', 'green', { key: 'le', i: 7 }), A('', 'green', { key: 'le', i: 8 }), A('', 'green', { key: 'le', i: 9 }), A('', 'green', { key: 'le', i: 10 }), A('', 'green', { key: 'le', i: 11 })]] },
-  'fd-engine-eec': { title: 'ENGINE', rows: [[A('REVERSER'), A('REVERSER')], [A('ENGINE\nCONTROL'), A('ENGINE\nCONTROL')], [B('EEC ON'), B('EEC ON')]] },
-  'fd-efis-panels': { title: 'EFIS', rows: [[K('MINS'), K('BARO')], [K('MODE'), K('RANGE')], [B('WXR'), B('STA'), B('WPT'), B('ARPT'), B('TERR')]] },
-  'fd-radios': { title: 'RADIO / AUDIO', rows: [[{ t: 'screen', text: '118.70', color: COLORS.white }, { t: 'screen', text: '121.50', color: COLORS.white }], [{ t: 'screen', text: '2000', color: COLORS.white, label: 'ATC' }, K('TCAS')], [B('VHF1'), B('VHF2'), B('PA'), B('INT')]] },
-  'fd-fire-panel': { title: 'FIRE PROTECTION', rows: [[{ t: 'button', text: 'ENG 1', lit: '#b8231c' }, { t: 'button', text: 'APU', lit: '#b8231c' }, { t: 'button', text: 'ENG 2', lit: '#b8231c' }], [T('OVHT/FIRE TEST'), B('BELL CUTOUT'), T('EXT TEST')]] },
-  'fd-trim-panel': { title: 'TRIM', rows: [[K('RUDDER TRIM', { angle: 0 }), T('AILERON'), T('AILERON')]] },
+  'fd-flight-controls': { title: 'FLIGHT CONTROL', rowH: [1.3, 0.8, 1.2, 1.3, 0.8, 1.2], rows: [
+    [G('FLT CONTROL A', { key: 'sw.fc.a', marks: ONOFF }), G('FLT CONTROL B', { key: 'sw.fc.b', marks: ONOFF })],
+    [A('LOW\nPRESSURE', 'amber', { lit: an('fc.a') }), A('LOW\nPRESSURE', 'amber', { lit: an('fc.b') })],
+    [G('SPOILER A', { on: true, marks: ONOFF }), G('SPOILER B', { on: true, marks: ONOFF })],
+    [G('ALTERNATE FLAPS', { key: 'sw.altflaps', marks: ['ARM', 'OFF'], guardPos: -1 }), T('ALTN FLAPS', { pos: 0, values: ['DOWN', 'OFF', 'UP'], marks: ['DOWN', 'OFF', 'UP'] })],
+    [A('FEEL DIFF\nPRESS'), A('SPEED TRIM\nFAIL'), A('MACH TRIM\nFAIL'), A('AUTO SLAT\nFAIL')],
+    [T('YAW DAMPER', { on: true, marks: ONOFF }), A('YAW\nDAMPER')],
+  ] },
+  'fd-nav-displays': { title: 'NAV / DISPLAYS SOURCE', rows: [
+    [K('VHF NAV', { values: ['BOTH ON 1', 'NORMAL', 'BOTH ON 2'], v: 'NORMAL', marks: ['1', 'N', '2'] }), K('IRS', { values: ['BOTH ON L', 'NORMAL', 'BOTH ON R'], v: 'NORMAL', marks: ['L', 'N', 'R'] }), K('FMC', { values: ['BOTH ON L', 'NORMAL', 'BOTH ON R'], v: 'NORMAL', marks: ['L', 'N', 'R'] }), K('DISPLAYS', { values: ['ALL ON 1', 'AUTO', 'ALL ON 2'], v: 'AUTO', marks: ['1', 'A', '2'] }), K('CONTROL PNL', { values: ['BOTH ON 1', 'NORMAL', 'BOTH ON 2'], v: 'NORMAL', marks: ['1', 'N', '2'] })],
+  ] },
+  'fd-fuel': { title: 'FUEL', rowH: [1.4, 1.1, 0.8, 1.2], rows: [
+    [GA('FUEL TEMP', { value: 0.45, scale: ['-50', '0', '+50'], gr: 0.55 }), A('ENG VALVE\nCLOSED', 'blue', { lit: (S) => !S.p.eng.run1 }), A('SPAR VALVE\nCLOSED', 'blue', { lit: (S) => !S.p.eng.run1 }), A('SPAR VALVE\nCLOSED', 'blue', { lit: (S) => !S.p.eng.run2 }), A('ENG VALVE\nCLOSED', 'blue', { lit: (S) => !S.p.eng.run2 })],
+    [A('FILTER\nBYPASS'), K('CROSSFEED', { key: 'sw.fuel.xfeed', marks: [{ a: -0.8, t: 'CLOSED' }, { a: 0.8, t: 'OPEN' }] }), A('VALVE\nOPEN', 'blue', { lit: an('fuel.xfeed') }), A('FILTER\nBYPASS')],
+    ['aft1', 'fwd1', 'ctrl', 'ctrr', 'fwd2', 'aft2'].map((k) => A('LOW\nPRESSURE', 'amber', { lit: an(`fuel.${k}`), ts: 0.17 })),
+    [['AFT 1', 'aft1'], ['FWD 1', 'fwd1'], ['CTR L', 'ctrl'], ['CTR R', 'ctrr'], ['FWD 2', 'fwd2'], ['AFT 2', 'aft2']].map(([l, k]) => T(l, { key: `sw.fuel.${k}`, marks: ONOFF })),
+  ] },
+  'fd-electrical': { title: 'ELECTRICAL', rowH: [0.8, 1.2, 1.2, 0.8, 1.2, 0.8, 1.2, 0.8], rows: [
+    [A('BAT\nDISCHARGE', 'amber', { lit: an('elec.batdisch') }), A('TR UNIT'), A('ELEC')],
+    [GA('DC AMPS', { value: 0.3, gr: 0.5 }), GA('AC VOLTS', { value: 0.62, gr: 0.5 }), GA('CPS FREQ', { value: 0.6, gr: 0.5 })],
+    [K('DC', { values: ['STBY PWR', 'BAT BUS', 'BAT', 'AUX BAT', 'TR1', 'TR2', 'TR3', 'TEST'], v: 'BAT', sweep: 3.2, marks: [] }), G('BAT', { key: 'sw.battery', marks: ONOFF }), K('AC', { values: ['STBY PWR', 'GRD PWR', 'GEN 1', 'APU GEN', 'GEN 2', 'INV', 'TEST'], v: 'GRD PWR', sweep: 3.0, marks: [] })],
+    [A('DRIVE', 'amber', { lit: an('elec.drive1') }), A('STANDBY\nPWR OFF', 'amber', { lit: (S) => !S.p.elec.acStby }), A('DRIVE', 'amber', { lit: an('elec.drive2') })],
+    [G('STANDBY POWER', { key: 'sw.stbypower', marks: ['AUTO', 'OFF'] }), A('GRD POWER\nAVAILABLE', 'blue', { lit: (S) => !!S.p.elec.avail?.ext }), T('GRD PWR', { key: 'act.elec.ext', marks: ONOFF }), T('BUS TRANSFER', { key: 'sw.bustransfer', marks: ['AUTO', 'OFF'] })],
+    [A('TRANSFER\nBUS OFF', 'amber', { lit: an('elec.tbo1') }), A('SOURCE\nOFF', 'amber', { lit: (S) => !S.p.elec.bus1 }), A('SOURCE\nOFF', 'amber', { lit: (S) => !S.p.elec.bus2 }), A('TRANSFER\nBUS OFF', 'amber', { lit: an('elec.tbo2') })],
+    [T('GEN 1', { key: 'act.elec.gen1', marks: ONOFF }), T('APU GEN', { key: 'act.elec.apu', marks: ONOFF }), T('APU GEN', { key: 'act.elec.apu', marks: ONOFF }), T('GEN 2', { key: 'act.elec.gen2', marks: ONOFF })],
+    [A('GEN OFF\nBUS', 'blue', { lit: (S) => S.p.elec.bus1 !== 'gen1' }), A('APU GEN\nOFF BUS', 'blue', { lit: (S) => S.a.apuGen.state !== 'off' }), GAP(), A('GEN OFF\nBUS', 'blue', { lit: (S) => S.p.elec.bus2 !== 'gen2' })],
+  ] },
+  'fd-apu': { title: 'APU', rowH: [1.4, 0.9, 1.4], rows: [
+    [GA('EGT', { value: (S) => (S.s('apu') ? 0.42 : 0.04), scale: ['0', '5', '10'], gr: 0.55 })],
+    [A('MAINT', 'blue'), A('LOW OIL\nPRESSURE'), A('FAULT'), A('OVER\nSPEED')],
+    [K('APU', { key: 'apu', marks: [{ a: -0.7, t: 'OFF' }, { a: 0, t: 'ON' }, { a: 0.7, t: 'START' }] })],
+  ] },
+  'fd-cabin-signs': { rowH: [0.5, 1.1, 0.6, 0.5, 1.2, 0.5, 1.2, 0.9], rows: [
+    [TX('EQUIP COOLING', { ts: 0.3 })],
+    [T('SUPPLY', { values: ['NORMAL', 'ALTERNATE'], v: 'NORMAL', marks: ['NORM', 'ALTN'] }), A('OFF'), A('OFF'), T('EXHAUST', { values: ['NORMAL', 'ALTERNATE'], v: 'NORMAL', marks: ['NORM', 'ALTN'] })],
+    [GAP()],
+    [TX('EMERGENCY EXIT LIGHTS', { ts: 0.3 })],
+    [G('EMER EXIT LIGHTS', { key: 'sw.emerlights', values: ['ON', 'ARMED', 'OFF'], marks: ['ON', 'ARMED', 'OFF'], guardPos: 0, label: '', name: 'EMERGENCY EXIT LIGHTS' }), A('NOT\nARMED', 'amber', { lit: an('emer.notArmed') })],
+    [TX('PASSENGER SIGNS', { ts: 0.3 })],
+    [T('NO SMOKING', { values: ['ON', 'AUTO', 'OFF'], v: 'AUTO', marks: ['ON', 'AUTO', 'OFF'] }), T('FASTEN BELTS', { values: ['ON', 'AUTO', 'OFF'], v: 'ON', marks: ['ON', 'AUTO', 'OFF'] })],
+    [B('ATTEND'), B('GRD\nCALL')],
+  ] },
+  'fd-window-probe-heat': { title: 'WINDOW HEAT', rowH: [0.8, 0.8, 1.3, 1.0, 0.5, 1.3, 0.8, 0.8], rows: [
+    ['lside', 'lfwd', 'rfwd', 'rside'].map((w) => A('OVERHEAT', 'amber', { lit: an(`wh.ovht.${w}`), ts: 0.17 })),
+    ['lside', 'lfwd', 'rfwd', 'rside'].map((w) => A('ON', 'green', { lit: an(`wh.${w}`) })),
+    [['L SIDE', 'lside'], ['L FWD', 'lfwd'], ['R FWD', 'rfwd'], ['R SIDE', 'rside']].map(([l, k]) => T(l, { key: `sw.wh.${k}`, marks: ONOFF })),
+    [T('TEST', { values: ['OVHT', 'NEUTRAL', 'PWR TEST'], v: 'NEUTRAL', spring: true, marks: ['OVHT', '', 'PWR'] })],
+    [TX('PROBE HEAT', { ts: 0.32 })],
+    [T('PROBE HEAT A', { key: 'sw.probe.a', marks: ONOFF }), GAP(0.5), T('PROBE HEAT B', { key: 'sw.probe.b', marks: ONOFF })],
+    [['CAPT\nPITOT', 'captPitot'], ['L ELEV\nPITOT', 'elevL'], ['L ALPHA\nVANE', 'aoaL'], ['TEMP\nPROBE', 'tat']].map(([t, k]) => A(t, 'amber', { lit: an(`probe.${k}`), ts: 0.17 })),
+    [['F/O\nPITOT', 'foPitot'], ['R ELEV\nPITOT', 'elevR'], ['R ALPHA\nVANE', 'aoaR'], ['AUX\nPITOT', 'auxPitot']].map(([t, k]) => A(t, 'amber', { lit: an(`probe.${k}`), ts: 0.17 })),
+  ] },
+  'fd-anti-ice': { title: 'ANTI-ICE', rowH: [0.9, 0.9, 1.4], rows: [
+    [A('L VALVE\nOPEN', 'blue', { lit: (S) => !!(S.p.antiice?.wingL ?? S.ann['ai.wing']) }), A('COWL\nANTI-ICE'), A('COWL\nANTI-ICE'), A('R VALVE\nOPEN', 'blue', { lit: (S) => !!(S.p.antiice?.wingR ?? S.ann['ai.wing']) })],
+    [GAP(), A('COWL VALVE\nOPEN', 'blue', { lit: an('ai.cowl1') }), A('COWL VALVE\nOPEN', 'blue', { lit: an('ai.cowl2') }), GAP()],
+    [T('WING ANTI-ICE', { key: 'sw.wingai', marks: ONOFF }), T('ENG 1', { key: 'sw.engai1', marks: ONOFF }), T('ENG 2', { key: 'sw.engai2', marks: ONOFF })],
+  ] },
+  'fd-hydraulics': { title: 'HYDRAULIC PUMPS', rowH: [0.8, 0.8, 1.4], rows: [
+    [GAP(), A('OVERHEAT'), A('OVERHEAT'), GAP()],
+    [A('LOW\nPRESSURE', 'amber', { lit: an('hyd.eng1') }), A('LOW\nPRESSURE', 'amber', { lit: an('hyd.elec2') }), A('LOW\nPRESSURE', 'amber', { lit: an('hyd.elec1') }), A('LOW\nPRESSURE', 'amber', { lit: an('hyd.eng2') })],
+    [T('ENG 1', { key: 'sw.hyd.eng1', marks: ONOFF }), T('ELEC 2', { key: 'sw.hyd.elec2', marks: ONOFF }), T('ELEC 1', { key: 'sw.hyd.elec1', marks: ONOFF }), T('ENG 2', { key: 'sw.hyd.eng2', marks: ONOFF })],
+  ] },
+  'fd-doors': { title: 'DOORS', rows: [
+    [A('FWD\nENTRY', 'amber', { lit: (S) => S.a.doorsAnn.state !== 'off' }), A('FWD\nSERVICE'), A('FWD\nCARGO', 'amber', { lit: (S) => S.a.doorsAnn.state !== 'off' }), A('EQUIP')],
+    [A('AFT\nENTRY', 'amber', { lit: (S) => S.a.doorsAnn.state !== 'off' }), A('AFT\nSERVICE'), A('AFT\nCARGO', 'amber', { lit: (S) => S.a.doorsAnn.state !== 'off' }), A('OVERWING')],
+  ] },
+  'fd-air-conditioning': { title: 'AIR TEMPERATURE', rowH: [1.3, 0.7, 1.2, 1.0], rows: [
+    [GA('TEMP', { value: 0.4, scale: ['0', '20', '40', '60'], gr: 0.55 }), K('SOURCE', { values: ['SUPPLY DUCT', 'PASS CAB', 'CONT CAB'], v: 'PASS CAB', marks: ['DUCT', 'PASS', 'CONT'] })],
+    [A('ZONE\nTEMP'), A('ZONE\nTEMP'), A('ZONE\nTEMP')],
+    [K('CONT CAB', { angle: 0.2, marks: [{ a: -1.3, t: 'C' }, { a: 1.3, t: 'W' }] }), K('FWD CAB', { angle: 0.1, marks: [{ a: -1.3, t: 'C' }, { a: 1.3, t: 'W' }] }), K('AFT CAB', { angle: 0.1, marks: [{ a: -1.3, t: 'C' }, { a: 1.3, t: 'W' }] })],
+    [T('TRIM AIR', { on: true, marks: ONOFF }), T('L RECIRC FAN', { on: true, marks: ['AUTO', 'OFF'] }), T('R RECIRC FAN', { on: true, marks: ['AUTO', 'OFF'] })],
+  ] },
+  'fd-bleed-air': { title: 'BLEED AIR', rowH: [1.2, 0.8, 1.3, 0.8, 1.3], rows: [
+    [A('DUAL\nBLEED', 'amber', { lit: an('bleed.dual') }), GA('DUCT PRESS', { value: (S) => (S.p.bleed.left || S.p.bleed.right ? 0.55 : 0.02), scale: ['0', '40', '80'], gr: 0.55 }), A('RAM DOOR\nFULL OPEN', 'blue', { lit: (S) => S.s('onGround') }), A('RAM DOOR\nFULL OPEN', 'blue', { lit: (S) => S.s('onGround') })],
+    [A('PACK', 'amber', { lit: an('pack.l') }), A('WING-BODY\nOVERHEAT'), B('TRIP\nRESET'), A('WING-BODY\nOVERHEAT'), A('PACK', 'amber', { lit: an('pack.r') })],
+    [T('L PACK', { key: 'sw.pack.l', marks: ['AUTO', 'OFF'] }), K('ISOLATION VALVE', { key: 'sw.iso', values: ['CLOSE', 'AUTO', 'OPEN'] }), T('R PACK', { key: 'sw.pack.r', marks: ['AUTO', 'OFF'] })],
+    [A('BLEED\nTRIP OFF', 'amber', { lit: an('bleed.trip1') }), GAP(), A('BLEED\nTRIP OFF', 'amber', { lit: an('bleed.trip2') })],
+    [T('1', { key: 'sw.bleed1', marks: ONOFF, label: 'BLEED 1' }), T('APU', { key: 'sw.apubleed', marks: ONOFF, label: 'APU BLEED' }), T('2', { key: 'sw.bleed2', marks: ONOFF, label: 'BLEED 2' })],
+  ] },
+  'fd-cabin-altitude': { screws: true, rows: [
+    [GA('', { gr: 0.78, face: (S) => D.faces.cabinAlt({ alt: S.p.pressurization?.cabinAlt ?? 0, diff: S.p.pressurization?.diff ?? 0 }), w: 1.3 }),
+      GA('', { gr: 0.78, face: (S) => D.faces.cabinRate({ rate: S.p.pressurization?.rate ?? 0 }), w: 1.3 }),
+      B('ALT HORN\nCUTOUT', { ts: 0.2, w: 0.8 })],
+  ] },
+  'fd-pressurization': { title: 'PRESSURIZATION', rowH: [1.2, 0.8, 1.4], rows: [
+    [SC('', { key: 'press.fltAlt', step: 500, min: -1000, max: 42000, text: (S) => fmtAlt(S.s('press.fltAlt')), top: 'FLT ALT', color: '#ffb21a' }),
+      SC('', { key: 'press.landAlt', step: 50, min: -1000, max: 14000, text: (S) => fmtAlt(S.s('press.landAlt')), top: 'LAND ALT', color: '#ffb21a' })],
+    [A('AUTO\nFAIL', 'amber', { lit: an('press.autoFail') }), A('OFF SCHED\nDESCENT', 'amber', { lit: an('press.offSched') }), A('ALTN', 'green', { lit: an('press.altn') }), A('MANUAL', 'green', { lit: an('press.manual') })],
+    [GA('VALVE', { face: (S) => D.faces.valve({ pos: S.p.pressurization?.outflow ?? 0.5 }), gr: 0.62 }),
+      T('FLT / GRD', { values: ['FLT', 'GRD'], v: 'FLT', marks: ['FLT', 'GRD'] }),
+      T('OUTFLOW VALVE', { pos: 0, marks: ['CLOSE', '', 'OPEN'], up: 'act.press.ofvClose', down: 'act.press.ofvOpen' }),
+      K('MODE', { key: 'press.mode', values: ['AUTO', 'ALTN', 'MAN'], marks: [{ a: -0.8, t: 'AUTO' }, { a: 0, t: 'ALTN' }, { a: 0.8, t: 'MAN' }] })],
+  ] },
+  'fd-exterior-lights': { rows: [[
+    T('L RETRACT', { key: 'light.landing', marks: ONOFF, label: 'RETRACTABLE' }), T('R RETRACT', { key: 'light.landing', marks: ONOFF, label: 'LANDING' }),
+    T('L FIXED', { key: 'light.landing', marks: ONOFF, label: 'L FIXED' }), T('R FIXED', { key: 'light.landing', marks: ONOFF, label: 'R FIXED' }),
+    T('L TURNOFF', { key: 'light.turnoff', marks: ONOFF, label: 'L RWY TURNOFF' }), T('R TURNOFF', { key: 'light.turnoff', marks: ONOFF, label: 'R RWY TURNOFF' }),
+    T('TAXI', { key: 'light.taxi', marks: ONOFF }),
+  ]] },
+  'fd-exterior-lights-2': { rows: [[
+    T('LOGO', { key: 'light.logo', marks: ONOFF }),
+    T('POSITION', { values: ['STROBE', 'OFF', 'STEADY'], marks: ['STROBE &\nSTEADY', 'OFF', 'STEADY'],
+      get: (S) => (S.s('light.strobe') ? 'STROBE' : S.s('light.nav') ? 'STEADY' : 'OFF'),
+      put: (v, set) => { const a = set('light.nav', v !== 'OFF'); set('light.strobe', v === 'STROBE'); return a; } }),
+    T('ANTI COLLISION', { key: 'light.beacon', marks: ONOFF }), T('WING', { key: 'light.wing', marks: ONOFF }), T('WHEEL WELL', { on: false, marks: ONOFF }),
+  ]] },
+  'fd-engine-start': { title: 'ENGINE START', rows: [[
+    K('ENG 1', { values: ['GRD', 'OFF', 'CONT', 'FLT'], v: 'OFF', sweep: 2.2, markSize: 0.18 }),
+    K('IGNITION', { values: ['IGN L', 'BOTH', 'IGN R'], v: 'IGN L', sweep: 1.6, markSize: 0.17 }),
+    K('ENG 2', { values: ['GRD', 'OFF', 'CONT', 'FLT'], v: 'OFF', sweep: 2.2, markSize: 0.18 }),
+  ]] },
+  // aft overhead
+  'fd-irs': { title: 'IRS', rowH: [1, 0.8, 0.8, 1.5], rows: [
+    [SC('', { text: () => 'N 47 27.4  E 008 33.1', ts: 0.13, sw: 3.2, color: '#ffb21a' })],
+    [A('ALIGN', 'white'), A('ON DC'), A('ALIGN', 'white'), A('ON DC')],
+    [A('FAULT'), A('DC FAIL'), A('FAULT'), A('DC FAIL')],
+    [K('L IRS', { values: ['OFF', 'ALIGN', 'NAV', 'ATT'], v: 'NAV', sweep: 2.0 }), K('R IRS', { values: ['OFF', 'ALIGN', 'NAV', 'ATT'], v: 'NAV', sweep: 2.0 })],
+  ] },
+  'fd-le-devices': { title: 'LE DEVICES', rows: [
+    [0, 1, 2, 3, 4, 5].map((i) => A('', 'green', { le: i })),
+    [6, 7, 8, 9, 10, 11].map((i) => A('', 'green', { le: i })),
+    [TX('FLAPS', { ts: 0.25 }), TX('SLATS', { ts: 0.25 }), TX('SLATS', { ts: 0.25 }), TX('FLAPS', { ts: 0.25 })],
+  ] },
+  'fd-engine-eec': { title: 'ENGINE', rows: [
+    [A('REVERSER'), A('REVERSER')],
+    [A('ENGINE\nCONTROL'), A('ENGINE\nCONTROL')],
+    [B('EEC\nON', { lit: '#e8e2c8' }), B('EEC\nON', { lit: '#e8e2c8' })],
+  ] },
+  'fd-oxygen': { title: 'OXYGEN', rowH: [1.5, 1.2], rows: [
+    [GA('CREW OXYGEN', { gr: 0.62, face: (S) => D.faces.oxygen({ psi: S.p.oxygen?.crewPressure ?? 1800 }) }), A('PASS OXY\nON', 'amber', { lit: an('oxy.paxOn') })],
+    [G('PASSENGER OXYGEN', { key: 'sw.oxy.pax', values: ['ON', 'NORMAL'], marks: ['ON', 'NORMAL'], guardPos: -1 })],
+  ] },
+  // forward electronic panel
+  'fd-autobrake': { title: 'AUTO BRAKE', rowH: [1.3, 0.8, 1.6], rows: [
+    [GA('', { name: 'BRAKE PRESSURE', gr: 0.62, face: (S) => D.faces.brake({ psi: S.p.gearbrakes?.accumulator ?? 3000 }) })],
+    [A('ANTISKID\nINOP', 'amber', { lit: an('gb.antiskidInop') }), A('AUTO BRAKE\nDISARM', 'amber', { lit: an('gb.autobrakeDisarm') })],
+    [K('', { name: 'AUTO BRAKE', key: 'sw.autobrake', values: ['OFF', 'RTO', '1', '2', '3', 'MAX'], sweep: 2.4, markSize: 0.2 })],
+  ] },
+  'fd-mfd': { title: 'MFD', rows: [
+    [B('ENG'), B('SYS'), B('C/R')],
+    [T('FUEL FLOW', { pos: 0, marks: ['RESET', 'RATE', 'USED'], values: ['RESET', 'RATE', 'USED'], v: 'RATE', spring: true })],
+  ] },
+  // aft electronic panel (P8)
+  'fd-cargo-fire': { title: 'CARGO FIRE', rowH: [1.2, 1], rows: [
+    [B('FWD', { bw: 1.2, bh: 0.9, ts: 0.22, toggleKey: 'fire.cargo.armFwd', litFn: (S) => (S.p.fire?.cargoFwd ? '#ff3b2f' : S.s('fire.cargo.armFwd') ? '#e8e2c8' : null), textFn: (S) => (S.s('fire.cargo.armFwd') ? 'FWD\nARMED' : 'FWD') }),
+      B('AFT', { bw: 1.2, bh: 0.9, ts: 0.22, toggleKey: 'fire.cargo.armAft', litFn: (S) => (S.p.fire?.cargoAft ? '#ff3b2f' : S.s('fire.cargo.armAft') ? '#e8e2c8' : null), textFn: (S) => (S.s('fire.cargo.armAft') ? 'AFT\nARMED' : 'AFT') }),
+      B('DISCH', { bw: 1.2, bh: 0.9, ts: 0.22, key: 'act.fire.cargoDisch', litFn: (S) => (S.p.fire?.bottleCargo ? '#ffb000' : null) })],
+    [K('DET SELECT', { values: ['A', 'ORM', 'B'], v: 'ORM', marks: ['A', 'NORM', 'B'] }), B('TEST', { key: 'act.fire.test' }), A('DETECTOR\nFAULT')],
+  ] },
+  'fd-radio-comm1': { title: 'VHF COMM 1', rows: [[SC('118.700', { color: '#f2f2f2', ts: 0.3, sw: 1.8 }), B('TFR', { bw: 0.8 }), SC('121.500', { color: '#f2f2f2', ts: 0.3, sw: 1.8 })], [K('', { style: 'round', angle: 0, w: 0.6 }), B('VHF1'), B('VHF2'), B('HF'), B('OFF')]] },
+  'fd-radio-comm2': { title: 'VHF COMM 2', rows: [[SC('124.350', { color: '#f2f2f2', ts: 0.3, sw: 1.8 }), B('TFR', { bw: 0.8 }), SC('121.500', { color: '#f2f2f2', ts: 0.3, sw: 1.8 })], [K('', { style: 'round', angle: 0, w: 0.6 }), B('VHF1'), B('VHF2'), B('HF'), B('OFF')]] },
+  'fd-radio-nav1': { title: 'NAV 1', rows: [[SC('110.30', { color: '#f2f2f2', ts: 0.3, sw: 1.6 }), B('TFR', { bw: 0.8 }), SC('113.70', { color: '#f2f2f2', ts: 0.3, sw: 1.6 })], [K('', { style: 'round', angle: 0 }), B('TEST')]] },
+  'fd-radio-nav2': { title: 'NAV 2', rows: [[SC('108.90', { color: '#f2f2f2', ts: 0.3, sw: 1.6 }), B('TFR', { bw: 0.8 }), SC('115.20', { color: '#f2f2f2', ts: 0.3, sw: 1.6 })], [K('', { style: 'round', angle: 0 }), B('TEST')]] },
+  'fd-acp': { title: 'AUDIO CONTROL', rows: [['VHF1', 'VHF2', 'VHF3', 'HF1', 'FLT', 'SERV', 'PA'].map((t) => B(t, { ts: 0.22 })), ['V1', 'V2', 'V3', 'HF', 'FL', 'SV', 'PA'].map((t) => K(t, { style: 'round', angle: -0.4, scale: 0.8 })), [T('R/T - I/C', { pos: 0, marks: ['R/T', '', 'I/C'] }), K('MASK/BOOM', { values: ['MASK', 'BOOM'], v: 'BOOM', marks: ['MASK', 'BOOM'] }), K('FILTER', { values: ['V', 'B', 'R'], v: 'B', marks: ['V', 'B', 'R'] })]] },
+  'fd-atc': { title: 'ATC / TCAS', rows: [[SC('2000', { color: '#f2f2f2', ts: 0.32, sw: 1.6 }), B('IDENT'), T('ALT SOURCE', { values: ['1', '2'], v: '1', marks: ['1', '2'] })], [K('MODE', { values: ['STBY', 'ALT OFF', 'XPNDR', 'TA ONLY', 'TA/RA'], v: 'TA/RA', sweep: 2.4, markSize: 0.16 }), K('', { style: 'round', angle: 0 }), K('', { style: 'round', angle: 0 })]] },
+  'fd-trim-panel': { title: 'RUDDER / AILERON TRIM', rows: [[GA('RUDDER', { value: 0.5, scale: ['L', '0', 'R'], gr: 0.5 }), K('RUDDER TRIM', { angle: 0, marks: [{ a: -0.9, t: 'NOSE L' }, { a: 0.9, t: 'NOSE R' }] }), T('AILERON', { pos: 0, marks: ['', '', ''] }), T('AILERON', { pos: 0, marks: ['', '', ''] })]] },
+  'fd-door-lock': { title: 'FLT DECK DOOR', rows: [[K('', { values: ['UNLKD', 'AUTO', 'DENY'], v: 'AUTO', marks: ['UNLKD', 'AUTO', 'DENY'] }), A('LOCK\nFAIL'), A('AUTO\nUNLK')]] },
+  // control stand
+  'fd-parking-brake-light': { screws: false, rows: [[A('PARKING\nBRAKE', 'red', { lit: an('gb.parkBrake'), aw: 1.5, ah: 0.75, ts: 0.22 })]] },
+  'fd-stab-cutout': { title: 'STAB TRIM', rows: [[G('MAIN ELECT', { on: true, marks: ['NORMAL', 'CUTOUT'] }), G('AUTO PILOT', { on: true, marks: ['NORMAL', 'CUTOUT'] })]] },
 };
-
-// ---- displays -----------------------------------------------------------------------
-function drawPFD(ctx, W, H, s) {
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  const cx = W * 0.5, cy = H * 0.5, aw = W * 0.5, ah = H * 0.56;
-  ctx.save();
-  rrect(ctx, cx - aw / 2, cy - ah / 2, aw, ah, W * 0.03); ctx.clip();
-  const pitchPx = (s.pitch * 8) * (ah / 40);
-  ctx.translate(cx, cy);
-  ctx.rotate((-s.bank * Math.PI) / 180);
-  ctx.fillStyle = '#2f80d1'; ctx.fillRect(-W, -H * 2 + pitchPx, W * 2, H * 2);
-  ctx.fillStyle = '#8b5a2b'; ctx.fillRect(-W, pitchPx, W * 2, H * 2);
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.006;
-  ctx.beginPath(); ctx.moveTo(-W, pitchPx); ctx.lineTo(W, pitchPx); ctx.stroke();
-  for (let p = -20; p <= 20; p += 2.5) {
-    if (p === 0) continue;
-    const y = pitchPx - p * (ah / 40);
-    const len = p % 10 === 0 ? aw * 0.28 : p % 5 === 0 ? aw * 0.16 : aw * 0.08;
-    ctx.beginPath(); ctx.moveTo(-len / 2, y); ctx.lineTo(len / 2, y); ctx.stroke();
-  }
-  ctx.restore();
-  // aircraft symbol
-  ctx.fillStyle = '#000'; ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.008;
-  for (const sgn of [-1, 1]) { ctx.fillRect(cx + sgn * aw * 0.12 - (sgn < 0 ? aw * 0.18 : 0), cy - H * 0.01, aw * 0.18, H * 0.02); ctx.strokeRect(cx + sgn * aw * 0.12 - (sgn < 0 ? aw * 0.18 : 0), cy - H * 0.01, aw * 0.18, H * 0.02); }
-  ctx.fillRect(cx - W * 0.012, cy - W * 0.012, W * 0.024, W * 0.024); ctx.strokeRect(cx - W * 0.012, cy - W * 0.012, W * 0.024, W * 0.024);
-  // tapes
-  const tape = (x, w, value, step, fmt) => {
-    ctx.fillStyle = '#5b6168'; ctx.fillRect(x, cy - ah / 2, w, ah);
-    ctx.fillStyle = '#fff'; ctx.font = `600 ${W * 0.042}px "JetBrains Mono", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (let i = -3; i <= 3; i++) {
-      const v = Math.round(value / step) * step + i * step;
-      if (v < 0) continue;
-      ctx.fillText(fmt(v), x + w / 2, cy - (v - value) * (ah / (step * 7)));
-    }
-    ctx.fillStyle = '#000'; ctx.fillRect(x - W * 0.005, cy - H * 0.04, w + W * 0.01, H * 0.08);
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.005; ctx.strokeRect(x - W * 0.005, cy - H * 0.04, w + W * 0.01, H * 0.08);
-    ctx.fillStyle = '#fff'; ctx.font = `700 ${W * 0.05}px "JetBrains Mono", monospace`;
-    ctx.fillText(fmt(value), x + w / 2, cy + H * 0.002);
-  };
-  tape(W * 0.06, W * 0.14, s.speed, 20, (v) => String(v));
-  tape(W * 0.79, W * 0.15, s.alt, 200, (v) => String(v));
-  // selected speed / altitude (magenta) from the MCP, with bugs on the tapes
-  ctx.fillStyle = '#ff4fd8'; ctx.font = `700 ${W * 0.045}px "JetBrains Mono", monospace`; ctx.textAlign = 'center';
-  ctx.fillText(String(s.selSpd), W * 0.13, cy - ah / 2 - H * 0.035);
-  ctx.fillText(String(s.selAlt), W * 0.865, cy - ah / 2 - H * 0.035);
-  const bug = (x, value, cur, step) => {
-    const y = Math.max(cy - ah / 2, Math.min(cy + ah / 2, cy - (value - cur) * (ah / (step * 7))));
-    ctx.fillRect(x, y - H * 0.012, W * 0.018, H * 0.024);
-  };
-  bug(W * 0.2, s.selSpd, s.speed, 20);
-  bug(W * 0.772, s.selAlt, s.alt, 200);
-  // heading arc
-  ctx.fillStyle = '#5b6168';
-  ctx.beginPath(); ctx.arc(cx, H * 1.12, H * 0.33, Math.PI * 1.2, Math.PI * 1.8); ctx.lineTo(cx, H * 1.12); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.font = `600 ${W * 0.04}px "JetBrains Mono", monospace`; ctx.textAlign = 'center';
-  ctx.fillText(String(s.hdg).padStart(3, '0'), cx, H * 0.86);
-  // FMA
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
-  ctx.font = `600 ${W * 0.04}px "JetBrains Mono", monospace`; ctx.fillStyle = '#2bd46a';
-  s.fma.forEach((m, i) => ctx.fillText(m, W * (0.25 + i * 0.25), H * 0.07));
-  if (s.cmd) { ctx.fillStyle = '#2bd46a'; ctx.font = `700 ${W * 0.05}px "JetBrains Mono", monospace`; ctx.fillText(s.cmd, cx, H * 0.17); }
-}
-
-function drawND(ctx, W, H, s = { hdg: 10 }) {
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  const cx = W / 2, cy = H * 0.84, r = H * 0.66;
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.005;
-  ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI * 1.17, Math.PI * 1.83); ctx.stroke();
-  ctx.setLineDash([W * 0.02, W * 0.02]);
-  ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, Math.PI * 1.17, Math.PI * 1.83); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#fff'; ctx.font = `600 ${W * 0.04}px "JetBrains Mono", monospace`; ctx.textAlign = 'center';
-  for (let d = -50; d <= 50; d += 10) {
-    const a = (d * Math.PI) / 180;
-    const x1 = cx + Math.sin(a) * r, y1 = cy - Math.cos(a) * r;
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(cx + Math.sin(a) * r * 0.95, cy - Math.cos(a) * r * 0.95); ctx.stroke();
-    if (d % 30 === 0) ctx.fillText(String(((360 + d) % 360) / 10), cx + Math.sin(a) * r * 0.86, cy - Math.cos(a) * r * 0.86);
-  }
-  // route
-  ctx.strokeStyle = '#ff4fd8'; ctx.lineWidth = W * 0.008;
-  const pts = [[cx, cy], [cx + W * 0.04, cy - H * 0.3], [cx - W * 0.1, cy - H * 0.52], [cx - W * 0.06, cy - H * 0.78]];
-  ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
-  ctx.fillStyle = '#ff4fd8'; ctx.font = `600 ${W * 0.038}px "JetBrains Mono", monospace`; ctx.textAlign = 'left';
-  [['RW01', 1], ['ALPHA', 2], ['BRAVO', 3]].forEach(([n, i]) => { const [x, y] = pts[i]; ctx.fillText(n, x + W * 0.025, y); });
-  // aircraft
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.008;
-  ctx.beginPath(); ctx.moveTo(cx, cy - H * 0.04); ctx.lineTo(cx - W * 0.03, cy + H * 0.03); ctx.lineTo(cx + W * 0.03, cy + H * 0.03); ctx.closePath(); ctx.stroke();
-  // selected heading bug (magenta) relative to the 010 track
-  {
-    let d = ((s.hdg - 10 + 540) % 360) - 180;
-    d = Math.max(-55, Math.min(55, d));
-    const a = (d * Math.PI) / 180;
-    const bx = cx + Math.sin(a) * r, by = cy - Math.cos(a) * r;
-    ctx.save(); ctx.translate(bx, by); ctx.rotate(a);
-    ctx.fillStyle = '#ff4fd8';
-    ctx.fillRect(-W * 0.03, -H * 0.03, W * 0.06, H * 0.03);
-    ctx.restore();
-  }
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = `600 ${W * 0.04}px "JetBrains Mono", monospace`;
-  ctx.fillText('GS  0  TAS  0', W * 0.04, H * 0.07);
-  ctx.textAlign = 'center'; ctx.fillText('TRK 010 MAG', cx, H * 0.07);
-  ctx.fillStyle = '#ff4fd8'; ctx.textAlign = 'right'; ctx.fillText('ALPHA', W * 0.96, H * 0.07);
-}
-
-function drawEngines(ctx, W, H, s) {
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  const dial = (x, y, r, frac, val, lab) => {
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.006;
-    ctx.beginPath(); ctx.arc(x, y, r, Math.PI * 0.75, Math.PI * 2.25); ctx.stroke();
-    const a = Math.PI * 0.75 + frac * Math.PI * 1.5;
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, r, Math.PI * 0.75, a); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); ctx.stroke();
-    ctx.fillStyle = '#000'; ctx.fillRect(x - r * 0.1, y - r * 0.62, r * 1.05, r * 0.42);
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.004; ctx.strokeRect(x - r * 0.1, y - r * 0.62, r * 1.05, r * 0.42);
-    ctx.fillStyle = '#fff'; ctx.font = `600 ${r * 0.32}px "JetBrains Mono", monospace`; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    ctx.fillText(val, x + r * 0.9, y - r * 0.41);
-    ctx.textAlign = 'center'; ctx.fillStyle = '#7fd3ff'; ctx.font = `600 ${r * 0.26}px "JetBrains Mono", monospace`;
-    if (lab) ctx.fillText(lab, W / 2, y);
-  };
-  const r = W * 0.15;
-  const n1 = s.n1L ?? s.n1, n1R = s.n1R ?? s.n1, egtL = s.egtL ?? s.egt, egtR = s.egtR ?? s.egt;
-  dial(W * 0.28, H * 0.25, r, n1 / 110, n1.toFixed(1), 'N1');
-  dial(W * 0.72, H * 0.25, r, n1R / 110, n1R.toFixed(1), '');
-  dial(W * 0.28, H * 0.58, r * 0.8, egtL / 1000, String(Math.round(egtL)), 'EGT');
-  dial(W * 0.72, H * 0.58, r * 0.8, egtR / 1000, String(Math.round(egtR)), '');
-  if (s.rev) {
-    ctx.font = `700 ${W * 0.05}px "JetBrains Mono", monospace`; ctx.fillStyle = s.rev === 'green' ? '#2bd46a' : '#ffb000';
-    ctx.fillText('REV', W * 0.28, H * 0.09); ctx.fillText('REV', W * 0.72, H * 0.09);
-  }
-  ctx.fillStyle = '#fff'; ctx.font = `600 ${W * 0.042}px "JetBrains Mono", monospace`;
-  ctx.fillText('FUEL', W / 2, H * 0.8);
-  [['1', '3.9', 0.25], ['CTR', '6.2', 0.5], ['2', '3.9', 0.75]].forEach(([n, v, x]) => {
-    ctx.fillStyle = '#7fd3ff'; ctx.fillText(n, W * x, H * 0.86); ctx.fillStyle = '#fff'; ctx.fillText(v, W * x, H * 0.93);
+// warning / status lights on the captain's and F/O's panels
+const WARN_LIGHTS = { screws: false, rows: [
+  [A('TAKEOFF\nCONFIG', 'red', { ts: 0.2 })],
+  [A('CABIN\nALTITUDE', 'red', { lit: an('press.cabinAlt'), ts: 0.2 })],
+] };
+const STATUS_STRIP = { screws: false, rows: [[
+  A('SPEED BRAKE\nARMED', 'green', { lit: (S) => S.a.sbArmed.state !== 'off', ts: 0.16 }),
+  A('SPEED BRAKE\nDO NOT ARM', 'amber', { ts: 0.16 }),
+  A('SPEEDBRAKE\nEXTENDED', 'amber', { lit: (S) => S.a.sbExt.state !== 'off', ts: 0.16 }),
+  A('STAB OUT\nOF TRIM', 'amber', { ts: 0.16 }),
+  A('BELOW\nG/S', 'amber', { ts: 0.16 }),
+  A('A/P', 'red', { ts: 0.2 }), A('A/T', 'red', { ts: 0.2 }), A('FMC', 'amber', { ts: 0.2 }),
+]] };
+const DISPLAY_SELECT = { screws: true, rows: [
+  [K('MAIN PANEL DUs', { values: ['OUTBD PFD', 'NORM', 'ENG PRI', 'PFD', 'MFD'], v: 'NORM', sweep: 2.4, markSize: 0.15, ls: 0.17 })],
+  [K('LOWER DU', { values: ['ENG PRI', 'NORM', 'ND'], v: 'NORM', sweep: 1.6, markSize: 0.15, ls: 0.17 })],
+] };
+const FIRE_HANDLE_X = [0.2, 0.5, 0.8];
+const FIRE_PANEL = { title: 'FIRE PROTECTION', rowH: [1.1, 1.7, 1.0], rows: [
+  [T('OVHT DET', { values: ['A', 'NORMAL', 'B'], v: 'NORMAL', marks: ['A', 'N', 'B'], scale: 0.85 }),
+    A('ENG 1\nOVERHEAT', 'amber', { lit: (S) => !!(S.p.fire?.ovht1 || S.p.fire?.testing), ts: 0.17 }),
+    A('WHEEL\nWELL', 'red', { lit: (S) => !!S.p.fire?.wheelwell, ts: 0.17 }),
+    A('FAULT', 'amber', { lit: (S) => !!S.p.fire?.testing, ts: 0.18 }),
+    B('BELL\nCUTOUT', { key: 'act.fire.bellCutout', ts: 0.18 }),
+    T('TEST', { pos: 0, marks: ['FAULT/\nINOP', '', 'OVHT/\nFIRE'], up: 'act.fire.test', down: 'act.fire.test', scale: 0.85 }),
+    A('APU DET\nINOP', 'amber', { ts: 0.17 }),
+    A('ENG 2\nOVERHEAT', 'amber', { lit: (S) => !!(S.p.fire?.ovht2 || S.p.fire?.testing), ts: 0.17 }),
+    T('OVHT DET', { values: ['A', 'NORMAL', 'B'], v: 'NORMAL', marks: ['A', 'N', 'B'], scale: 0.85 })],
+  [GAP()],
+  [A('L BOTTLE\nDISCHARGE', 'amber', { lit: (S) => !!S.p.fire?.bottleL, ts: 0.17 }),
+    A('APU BOTTLE\nDISCHARGE', 'amber', { lit: (S) => !!S.p.fire?.bottleApu, ts: 0.17 }),
+    A('R BOTTLE\nDISCHARGE', 'amber', { lit: (S) => !!S.p.fire?.bottleR, ts: 0.17 }),
+    T('EXT TEST', { pos: 0, marks: ['1', '', '2'], scale: 0.85 })],
+], after(ctx, W, H) {
+  // handle wells with legends and discharge arrows
+  const y = H * 0.5;
+  FIRE_HANDLE_X.forEach((fx, i) => {
+    const x = W * fx;
+    ctx.fillStyle = '#121418'; rrect(ctx, x - W * 0.085, y - H * 0.12, W * 0.17, H * 0.24, H * 0.04); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 2; ctx.stroke();
+    const lab = ['ENG 1', 'APU', 'ENG 2'][i];
+    drawLabel(ctx, i === 1 ? 'DISCH' : 'L', x - W * 0.11, y - H * 0.16, H * 0.05, '#f4f3ee');
+    drawLabel(ctx, i === 1 ? 'DISCH' : 'R', x + W * 0.11, y - H * 0.16, H * 0.05, '#f4f3ee');
+    drawLabel(ctx, lab, x, y + H * 0.17, H * 0.05, '#f4f3ee');
+    ctx.strokeStyle = '#f4f3ee'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, W * 0.1, Math.PI * 1.15, Math.PI * 1.4); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, W * 0.1, Math.PI * 1.6, Math.PI * 1.85); ctx.stroke();
   });
-}
+} };
 
-function drawLowerDU(ctx, W, H) {
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#7fd3ff'; ctx.font = `600 ${W * 0.06}px "JetBrains Mono", monospace`; ctx.textAlign = 'center';
-  ctx.fillText('HYDRAULIC', W / 2, H * 0.12);
-  ['A', 'B'].forEach((n, i) => {
-    const x = W * (0.3 + i * 0.4);
-    ctx.fillStyle = '#7fd3ff'; ctx.fillText(n, x, H * 0.3);
-    ctx.fillStyle = '#fff'; ctx.fillText('3000', x, H * 0.48); ctx.fillText('100%', x, H * 0.66);
-  });
-  ctx.fillStyle = '#7fd3ff'; ctx.font = `600 ${W * 0.045}px "JetBrains Mono", monospace`;
-  ctx.fillText('PRESS', W / 2, H * 0.48); ctx.fillText('QTY', W / 2, H * 0.66);
-}
+const fmtAlt = (v) => { const n = Math.round(Number(v) || 0); return (n < 0 ? '-' : '') + String(Math.abs(n)).padStart(5, '0'); };
+const pad3 = (n) => String(Math.round(((n % 360) + 360) % 360) || 360).padStart(3, '0');
 
-function drawISFD(ctx, W, H) {
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#2f80d1'; ctx.fillRect(W * 0.2, H * 0.15, W * 0.6, H * 0.35);
-  ctx.fillStyle = '#8b5a2b'; ctx.fillRect(W * 0.2, H * 0.5, W * 0.6, H * 0.35);
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.012; ctx.beginPath(); ctx.moveTo(W * 0.2, H * 0.5); ctx.lineTo(W * 0.8, H * 0.5); ctx.stroke();
-  ctx.fillStyle = '#ffd400'; ctx.fillRect(W * 0.35, H * 0.49, W * 0.3, H * 0.025);
-  ctx.fillStyle = '#fff'; ctx.font = `600 ${W * 0.09}px "JetBrains Mono", monospace`; ctx.textAlign = 'center';
-  ctx.fillText('0', W * 0.1, H * 0.52); ctx.fillText('0', W * 0.9, H * 0.52); ctx.fillText('29.92', W * 0.5, H * 0.95);
-}
-
-function drawCDU(ctx, W, H) {
-  ctx.fillStyle = '#3c4249'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#05080a'; ctx.fillRect(W * 0.12, H * 0.05, W * 0.76, H * 0.42);
-  ctx.font = `600 ${W * 0.05}px "JetBrains Mono", monospace`; ctx.textAlign = 'left';
-  const lines = [['     IDENT', '#fff'], [' MODEL', '#9aa'], [' 737-800W', '#2bd46a'], [' ENG RATING', '#9aa'], [' 26K', '#2bd46a'], [' NAV DATA', '#9aa'], [' ---------', '#fff'], ['<INDEX   POS INIT>', '#fff']];
-  lines.forEach(([t, c], i) => { ctx.fillStyle = c; ctx.fillText(t, W * 0.15, H * (0.1 + i * 0.045)); });
-  ctx.fillStyle = '#d9dcd8';
-  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) {
-    rrect(ctx, W * (0.1 + c * 0.135), H * (0.52 + r * 0.075), W * 0.11, H * 0.055, W * 0.01); ctx.fill();
-  }
-  for (let i = 0; i < 6; i++) { ctx.fillRect(W * 0.03, H * (0.09 + i * 0.06), W * 0.06, H * 0.03); ctx.fillRect(W * 0.91, H * (0.09 + i * 0.06), W * 0.06, H * 0.03); }
-}
-
-// MCP layout, shared by the renderer and the click/scroll regions (normalized canvas coordinates).
-const MCP = {
-  windows: [
-    { id: 'crs', x: 0.015, w: 0.06, label: 'COURSE' },
-    { id: 'spd', x: 0.14, w: 0.08, label: 'IAS/MACH' },
-    { id: 'hdg', x: 0.335, w: 0.06, label: 'HEADING' },
-    { id: 'alt', x: 0.54, w: 0.09, label: 'ALTITUDE' },
-    { id: 'vs', x: 0.68, w: 0.08, label: 'VERT SPEED' },
-    { id: 'crs', x: 0.925, w: 0.06, label: 'COURSE' },
-  ],
-  buttons: [['N1', 0.12], ['SPEED', 0.17], ['LVL CHG', 0.22], ['VNAV', 0.27], ['HDG SEL', 0.33], ['LNAV', 0.38], ['VOR LOC', 0.43], ['APP', 0.48], ['ALT HLD', 0.56], ['V/S', 0.61], ['CMD A', 0.78], ['CMD B', 0.83]],
-  toggles: [['fdL', 'F/D', 0.035], ['at', 'A/T ARM', 0.085], ['fdR', 'F/D', 0.965]],
-  winY: 0.2, winH: 0.28, btnY: 0.6, btnH: 0.26, btnW: 0.045,
-};
-const pad3 = (n) => String(Math.round(n)).padStart(3, '0');
-
-function drawMCP(ctx, W, H, s) {
-  ctx.fillStyle = '#40464d'; ctx.fillRect(0, 0, W, H);
-  const text = { crs: pad3(s.crs), spd: String(s.spd), hdg: pad3(s.hdg), alt: String(s.alt), vs: s.modes.includes('V/S') ? `${s.vs > 0 ? '+' : ''}${s.vs}` : '' };
-  for (const w of MCP.windows) {
-    ctx.fillStyle = '#07090b'; ctx.fillRect(W * w.x, H * MCP.winY, W * w.w, H * MCP.winH);
-    ctx.fillStyle = '#ffb21a'; ctx.font = `600 ${H * 0.2}px "JetBrains Mono", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(text[w.id], W * (w.x + w.w / 2), H * 0.34);
-    drawLabel(ctx, w.label, W * (w.x + w.w / 2), H * 0.1, H * 0.1, '#fff');
-  }
-  for (const [t, x] of MCP.buttons) {
-    const on = t.startsWith('CMD') ? s[t === 'CMD A' ? 'cmdA' : 'cmdB'] : s.modes.includes(t);
-    ctx.fillStyle = '#d6d9d5'; rrect(ctx, W * x, H * MCP.btnY, W * MCP.btnW, H * MCP.btnH, H * 0.03); ctx.fill();
-    ctx.fillStyle = on ? '#35f07c' : '#5b6a60';
-    ctx.fillRect(W * (x + 0.006), H * (MCP.btnY + 0.03), W * (MCP.btnW - 0.012), H * 0.045);
-    drawLabel(ctx, t, W * (x + MCP.btnW / 2), H * (MCP.btnY + 0.16), H * 0.072, '#222');
-  }
-  for (const [key, lab, x] of MCP.toggles) {
-    const cx = W * x, cy = H * 0.74, r = H * 0.09;
-    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#d9dde0'; ctx.fillRect(cx - r * 0.25, s[key] ? cy - r * 1.6 : cy, r * 0.5, r * 1.6);
-    drawLabel(ctx, lab, cx, H * 0.94, H * 0.075, '#fff');
-    drawLabel(ctx, s[key] ? 'ON' : 'OFF', cx, H * 0.52, H * 0.065, s[key] ? '#7ef0a8' : '#aaa');
-  }
-}
-
-const SIX = {
-  L: ['FLT CONT', 'IRS', 'FUEL', 'ELEC', 'APU', 'OVHT/DET'],
-  R: ['ANTI-ICE', 'HYD', 'DOORS', 'ENG', 'OVERHEAD', 'AIR COND'],
-};
-function drawMasterCaution(ctx, W, H, s) {
-  ctx.fillStyle = '#2d3238'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#5c0d0a'; rrect(ctx, W * 0.08, H * 0.08, W * 0.38, H * 0.38, W * 0.03); ctx.fill();
-  drawLabel(ctx, 'FIRE\nWARN', W * 0.27, H * 0.27, H * 0.11, 'rgba(255,90,80,0.65)');
-  ctx.fillStyle = s.mc ? '#ffb000' : '#4d3500'; rrect(ctx, W * 0.54, H * 0.08, W * 0.38, H * 0.38, W * 0.03); ctx.fill();
-  drawLabel(ctx, 'MASTER\nCAUTION', W * 0.73, H * 0.27, H * 0.1, s.mc ? '#1d1300' : 'rgba(255,190,60,0.65)');
-  SIX[s.side].forEach((t, i) => {
-    const lit = s.six.includes(t);
-    const x = W * (0.08 + (i % 3) * 0.29), y = H * (0.56 + Math.floor(i / 3) * 0.2);
-    ctx.fillStyle = lit ? '#ffb000' : '#1d2024'; ctx.fillRect(x, y, W * 0.26, H * 0.16);
-    drawLabel(ctx, t, x + W * 0.13, y + H * 0.08, H * 0.07, lit ? '#1d1300' : 'rgba(255,190,60,0.35)');
-  });
-}
-
-function drawGearPanel(ctx, W, H, s) {
-  ctx.fillStyle = '#5f6873'; ctx.fillRect(0, 0, W, H);
-  const light = (x, y, w, h, on, color, text) => {
-    ctx.fillStyle = on ? color : '#1e2125'; ctx.fillRect(x, y, w, h);
-    drawLabel(ctx, text, x + w / 2, y + h / 2, h * 0.28, on ? '#111' : 'rgba(255,255,255,0.25)');
-  };
-  const g = s.gear;
-  ['LEFT\nGEAR', 'NOSE\nGEAR', 'RIGHT\nGEAR'].forEach((t, i) => {
-    const x = W * (0.06 + i * 0.31);
-    light(x, H * 0.04, W * 0.26, H * 0.09, g === 'red', '#ff3b2f', t);
-    light(x, H * 0.15, W * 0.26, H * 0.09, g === 'green', '#2bd46a', t);
-  });
-  // flap indicator
-  const cx = W * 0.5, cy = H * 0.5, r = W * 0.3;
-  ctx.fillStyle = '#0b0d10'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = W * 0.01;
-  FLAP_DETENTS.forEach((d, i) => {
-    const a = -Math.PI * 0.6 + (i / (FLAP_DETENTS.length - 1)) * Math.PI * 1.45;
-    ctx.beginPath(); ctx.moveTo(cx + Math.sin(a) * r * 0.8, cy - Math.cos(a) * r * 0.8); ctx.lineTo(cx + Math.sin(a) * r * 0.95, cy - Math.cos(a) * r * 0.95); ctx.stroke();
-    drawLabel(ctx, d === 0 ? '0' : String(d), cx + Math.sin(a) * r * 0.62, cy - Math.cos(a) * r * 0.62, r * 0.17, '#fff');
-  });
-  const idx = (() => { for (let i = 0; i < FLAP_DETENTS.length - 1; i++) { if (s.flap <= FLAP_DETENTS[i + 1]) return i + (s.flap - FLAP_DETENTS[i]) / (FLAP_DETENTS[i + 1] - FLAP_DETENTS[i]); } return FLAP_DETENTS.length - 1; })();
-  const a = -Math.PI * 0.6 + (idx / (FLAP_DETENTS.length - 1)) * Math.PI * 1.45;
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = W * 0.02;
-  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(a) * r * 0.85, cy - Math.cos(a) * r * 0.85); ctx.stroke();
-  drawLabel(ctx, 'FLAPS', cx, cy + r * 0.45, r * 0.16, '#fff');
-  light(W * 0.06, H * 0.84, W * 0.42, H * 0.07, s.leTransit, '#ffb000', 'LE FLAPS\nTRANSIT');
-  light(W * 0.52, H * 0.84, W * 0.42, H * 0.07, s.leExt, '#2bd46a', 'LE FLAPS\nEXT');
-  drawLabel(ctx, 'AUTO BRAKE', W * 0.5, H * 0.97, H * 0.03, '#fff');
-}
-
-// ---- builder -------------------------------------------------------------------------
+// ---- builder -------------------------------------------------------------------------------------
 export function buildFlightDeck(systems) {
   const root = new THREE.Group();
   root.name = 'b738-flightdeck';
-  const mats = {
-    wall: new THREE.MeshStandardMaterial({ color: '#c3c5c0', roughness: 0.85 }),
-    trim: new THREE.MeshStandardMaterial({ color: '#8e9398', roughness: 0.7 }),
-    glare: new THREE.MeshStandardMaterial({ color: '#1f2226', roughness: 0.95 }),
-    floor: new THREE.MeshStandardMaterial({ color: '#3a3e44', roughness: 0.95 }),
-    panel: new THREE.MeshStandardMaterial({ color: COLORS.panel, roughness: 0.75 }),
-    seat: new THREE.MeshStandardMaterial({ color: '#2c3036', roughness: 0.9 }),
-    metal: new THREE.MeshStandardMaterial({ color: '#c9ced3', roughness: 0.35, metalness: 0.7 }),
-    black: new THREE.MeshStandardMaterial({ color: '#111316', roughness: 0.6 }),
-    glass: new THREE.MeshBasicMaterial({ color: '#bcd8f0', transparent: true, opacity: 0.08, depthWrite: false }),
-  };
-  const box = (w, h, d, mat, pos, parent = root) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(...pos);
-    parent.add(m);
-    return m;
+  const mats = makeMaterials();
+  const kit = createControlKit(mats);
+  const paintNormal = paintSet().normal;
+  let night = false;
+
+  // local fallback for keys whose extension isn't loaded (keeps the switch usable)
+  const local = {};
+  const getS = (k) => (k in systems.state ? systems.state[k] : local[k]);
+  const trySet = (k, v) => {
+    const r = systems.set(k, v);
+    if (!r.ok && /Unknown control/.test(r.message || '')) { local[k] = v; return { ok: true }; }
+    return r;
   };
 
-  // sky dome
-  {
-    const c = document.createElement('canvas'); c.width = 4; c.height = 256;
-    const g = c.getContext('2d'); const grd = g.createLinearGradient(0, 0, 0, 256);
-    grd.addColorStop(0, '#3f7fc4'); grd.addColorStop(0.45, '#a9cbe8'); grd.addColorStop(0.5, '#e4ecf1'); grd.addColorStop(0.52, '#7b8085'); grd.addColorStop(1, '#4d5257');
-    g.fillStyle = grd; g.fillRect(0, 0, 4, 256);
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(80, 32, 16), new THREE.MeshBasicMaterial({ map: canvasTexture(c), side: THREE.BackSide, fog: false }));
-    sky.position.y = 1.2;
-    sky.raycast = () => {};
-    root.add(sky);
-  }
-  const amb = new THREE.HemisphereLight(0xffffff, 0x666a70, 0.9);
-  root.add(amb);
-  const dome = new THREE.PointLight(0xfff3e0, 1.2, 4, 1.5);
-  dome.position.set(-0.3, 1.9, 0);
-  root.add(dome);
+  // one snapshot of the systems per frame, shared by every panel
+  let S = null;
+  const snap = () => {
+    if (S) return S;
+    const p = systems.panel();
+    S = { p, ann: p.ann || {}, a: systems.annunciators(), s: getS };
+    return S;
+  };
 
-  // shell
-  box(2.3, 0.04, 2.1, mats.floor, [-0.15, -0.02, 0]);
-  box(1.6, 0.04, 1.9, mats.wall, [-0.5, 2.04, 0]);
-  for (const s of [-1, 1]) {
-    box(2.1, 1.0, 0.04, mats.wall, [-0.2, 0.5, s * 1.04]);
-    box(1.4, 0.45, 0.04, mats.wall, [-0.55, 1.25, s * 1.04]);
-    box(2.1, 0.5, 0.04, mats.wall, [-0.2, 1.8, s * 1.04]);
-    box(0.08, 0.5, 0.04, mats.trim, [0.86, 1.25, s * 1.04]);
-    const sideGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.46), mats.glass);
-    sideGlass.position.set(0.5, 1.27, s * 1.035); sideGlass.rotation.y = Math.PI / 2; sideGlass.raycast = () => {};
-    root.add(sideGlass);
-  }
-  box(0.04, 2.1, 2.1, mats.wall, [-1.25, 1.0, 0]);
-  // windshield frame + glass
-  const wsBottom = V(1.12, 1.06, 0), wsTop = V(0.72, 1.66, 0);
-  const wsMid = wsBottom.clone().add(wsTop).multiplyScalar(0.5);
-  const wsLen = wsBottom.distanceTo(wsTop);
-  const wsAngle = Math.atan2(wsTop.y - wsBottom.y, wsTop.x - wsBottom.x);
-  for (const z of [0, -0.56, 0.56, -1.0, 1.0]) {
-    const post = box(z === 0 ? 0.035 : 0.05, wsLen, 0.045, mats.glare, [wsMid.x, wsMid.y, z]);
-    post.rotation.z = wsAngle - Math.PI / 2;
-  }
-  // window sill along the top of the glareshield and the header
-  box(0.05, 0.035, 2.06, mats.glare, [wsBottom.x - 0.02, wsBottom.y + 0.01, 0]);
-  box(0.05, 0.035, 2.06, mats.glare, [wsTop.x + 0.01, wsTop.y, 0]);
-  const wsGlass = new THREE.Mesh(new THREE.PlaneGeometry(2.0, wsLen), mats.glass);
-  wsGlass.position.copy(wsMid);
-  wsGlass.lookAt(wsMid.clone().add(V(-Math.sin(wsAngle), Math.cos(wsAngle), 0)));
-  wsGlass.raycast = () => {};
-  root.add(wsGlass);
-  box(0.7, 0.05, 2.06, mats.trim, [0.6, 1.98, 0]); // header above windshield
+  // ---- world, shell, glareshield
+  const outside = buildOutside(root);
+  outside.setNight(false);
+  buildShell(root, mats);
+  buildGlareshield(root, mats);
 
-  // ---- zones helpers
-  const zoneMeshes = [];
-  const dynamic = [];
-  const nightables = [];
-  function facing(pos, dir) {
+  // ---- lights
+  const hemi = new THREE.HemisphereLight(0xe4edf7, 0x4a4844, 0.4);
+  root.add(hemi);
+  const dome = new THREE.PointLight(0xfff1dc, 0.6, 3.5, 2);
+  dome.position.set(-0.35, 1.95, 0); root.add(dome);
+  const spot = (pos, target, color, angle = 0.8) => {
+    const l = new THREE.SpotLight(color, 0, 3, angle, 0.6, 2);
+    l.position.copy(pos); l.target.position.copy(target); root.add(l, l.target); return l;
+  };
+  const floods = [
+    spot(V(0.7, 0.965, -0.5), V(0.92, 0.7, -0.55), 0xffe2b8), // glareshield floods onto the main panel
+    spot(V(0.7, 0.965, 0.5), V(0.92, 0.7, 0.55), 0xffe2b8),
+    spot(V(0.0, 1.98, 0), V(0.25, 0.55, 0), 0xffe7c4, 0.6), // pedestal flood from the aft overhead
+    spot(V(-0.3, 1.5, 0), V(0.3, 1.85, 0), 0xffe7c4, 0.9), // overhead panel flood
+  ];
+
+  // ---- zone helpers
+  const zones = []; // { mesh, refresh(force) }
+  function facing(pos, dir, parent = root) {
     const g = new THREE.Group();
     g.position.copy(pos);
-    root.add(g);
+    parent.add(g);
     g.lookAt(pos.clone().add(dir.clone().normalize()));
     return g;
   }
+  const overlayMat = (tex) => {
+    const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    m.color.setScalar(1.7);
+    return m;
+  };
+  function bezel(parent, w, h, x, y, border = 0.014, depth = 0.012) {
+    const s = new THREE.Shape();
+    const W2 = w / 2 + border, H2 = h / 2 + border;
+    s.moveTo(-W2, -H2); s.lineTo(W2, -H2); s.lineTo(W2, H2); s.lineTo(-W2, H2); s.closePath();
+    const hole = new THREE.Path(); hole.moveTo(-w / 2, -h / 2); hole.lineTo(-w / 2, h / 2); hole.lineTo(w / 2, h / 2); hole.lineTo(w / 2, -h / 2); hole.closePath();
+    s.holes.push(hole);
+    const geo = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 2 });
+    const m = new THREE.Mesh(geo, mats.frame);
+    m.position.set(x, y, 0); m.castShadow = true; m.receiveShadow = true;
+    parent.add(m);
+    // glass cover: faint reflections over the display
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshPhysicalMaterial({ color: '#0a0c0e', transparent: true, opacity: 0.1, roughness: 0.12, metalness: 0, depthWrite: false, envMapIntensity: 0.5 }));
+    glass.position.set(x, y, 0.008); glass.raycast = () => {}; glass.renderOrder = 3;
+    parent.add(glass);
+    return m;
+  }
+
+  /**
+   * A painted zone. `drawer` is a layout object (rows of controls) or a function
+   * (ctx, W, H, state, glowCtx). opts: { screen, state(), regions, side, ppm, z }
+   */
   function zone(parent, partId, w, h, x, y, drawer, opts = {}) {
-    const canvas = makeCanvas(w, h);
+    const layout = typeof drawer === 'function' ? null : drawer;
+    const ppm = opts.ppm || (opts.screen ? PPM_DU : PPM);
+    const canvas = makeCanvas(w, h, ppm);
     const tex = canvasTexture(canvas);
-    const overrides = {}; // local positions of switches that aren't linked to aircraft systems
+    const glowCanvas = opts.screen ? null : makeCanvas(w, h, ppm);
+    const glowTex = glowCanvas ? canvasTexture(glowCanvas) : null;
+    const overrides = {};
     let controls = [];
-    const redraw = (state) => {
-      const ctx = canvas.getContext('2d');
-      if (typeof drawer === 'function') drawer(ctx, canvas.width, canvas.height, state);
-      else controls = paintPanel(canvas, resolveLayout(drawer, state, overrides));
-      tex.needsUpdate = true;
-    };
-    const redrawNow = () => redraw(opts.state ? opts.state() : {});
-    redraw(opts.state ? opts.state() : {});
-    // Screens are self-lit only (black base color, full emissive) so colors stay true.
-    const mat = new THREE.MeshStandardMaterial({
-      map: opts.screen ? null : tex,
-      color: opts.screen ? new THREE.Color('#000000') : new THREE.Color('#ffffff'),
-      roughness: opts.screen ? 0.2 : 0.7, metalness: 0.05,
-      emissive: opts.screen ? new THREE.Color('#d8d8d8') : new THREE.Color('#2a2a2a'), emissiveMap: tex,
-    });
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 2, 2), mat);
+    const slots = new Map(); // control index -> 3D parts
+    const normal = paintNormal.clone(); normal.repeat.set(w / 0.05, h / 0.05); normal.needsUpdate = true;
+    const mat = opts.screen
+      ? new THREE.MeshStandardMaterial({ color: '#000000', roughness: 0.95, metalness: 0, emissive: new THREE.Color('#ffffff'), emissiveMap: tex, emissiveIntensity: 1.15 })
+      : new THREE.MeshStandardMaterial({ map: tex, roughness: 0.62, metalness: 0.04, normalMap: normal, normalScale: new THREE.Vector2(0.25, 0.25), emissive: new THREE.Color('#161616'), emissiveMap: tex });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
     m.position.set(x, y, opts.z ?? 0.004);
+    m.receiveShadow = true;
     if (partId) { m.userData.partId = partId; m.userData.side = opts.side || 'C'; }
     parent.add(m);
-    zoneMeshes.push(m);
-    if (!opts.screen) nightables.push(m);
+    if (!opts.screen) {
+      // light-plate edge for depth
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(w + 0.004, h + 0.004, 0.006), mats.panelDark);
+      edge.position.set(x, y, (opts.z ?? 0.004) - 0.0032); parent.add(edge);
+    }
+    let overlay = null;
+    if (glowTex) {
+      overlay = new THREE.Mesh(new THREE.PlaneGeometry(w, h), overlayMat(glowTex));
+      overlay.position.set(x, y, (opts.z ?? 0.004) + 0.0008); overlay.raycast = () => {}; overlay.renderOrder = 1;
+      parent.add(overlay);
+    }
 
-    if (typeof drawer !== 'function') {
+    let last = null;
+    function paint(force = false) {
+      if (layout) {
+        const res = resolveLayout(layout, snap(), overrides);
+        const sig = res.sig + (night ? 'N' : 'D');
+        if (!force && sig === last) return;
+        last = sig;
+        controls = paintPanel(canvas, res.layout, { glow: glowCanvas, night, solid: true });
+        place3D(res.layout);
+      } else {
+        const st = { ...(opts.state ? opts.state() : {}), night };
+        const sig = JSON.stringify(st);
+        if (!force && sig === last) return;
+        last = sig;
+        drawer(canvas.getContext('2d'), canvas.width, canvas.height, st, glowCanvas?.getContext('2d'));
+      }
+      tex.needsUpdate = true;
+      if (glowTex) glowTex.needsUpdate = true;
+    }
+    // 3D toggles / guards / knobs on top of the painted bases
+    function place3D(lay) {
+      const px2m = w / canvas.width;
+      controls.forEach((c, i) => {
+        const t = c.it.t;
+        if (t !== 'toggle' && t !== 'guard' && t !== 'knob') return;
+        let sl = slots.get(i);
+        const lx = x + (c.x - 0.5) * w, ly = y + (0.5 - c.y) * h, lz = (opts.z ?? 0.004) + 0.001;
+        const sc = c.u * px2m;
+        if (!sl) {
+          sl = {};
+          if (t === 'knob') {
+            if (c.it.style === 'round') sl.knob = kit.add('knobRound', parent, lx, ly, lz, sc * 0.8);
+            else { sl.knob = kit.add('knob', parent, lx, ly, lz, sc); sl.line = kit.add('knobLine', parent, lx, ly, lz, sc); }
+          } else {
+            sl.nut = kit.add('nut', parent, lx, ly, lz, sc);
+            sl.lever = kit.add('lever', parent, lx, ly, lz, sc * 1.05);
+            if (t === 'guard') sl.guard = kit.add('guard', parent, lx, ly + sc * 0.62, lz, sc);
+          }
+          slots.set(i, sl);
+        }
+        if (t === 'knob') {
+          const a = c.it.angle ?? -0.6;
+          sl.knob.set(0, -a); sl.line?.set(0, -a);
+        } else {
+          const pos = c.it.pos !== undefined ? c.it.pos : c.it.on ? 1 : -1;
+          sl.nut.set(0, 0);
+          sl.lever.set(-0.5 * pos, 0);
+          if (sl.guard) sl.guard.set(pos === (c.it.guardPos ?? 1) ? 0 : -1.95, 0);
+        }
+      });
+      void lay;
+    }
+    paint(true);
+
+    if (layout) {
       const OPERABLE = new Set(['toggle', 'guard', 'knob', 'button']);
       const hit = (uv) => {
         if (!uv) return null;
         const px = uv.x, py = 1 - uv.y;
-        return controls.find((c) => OPERABLE.has(c.it.t) && ((px - c.x) / c.rx) ** 2 + ((py - c.y) / c.ry) ** 2 <= 1) || null;
+        const c = controls.find((cc) => (OPERABLE.has(cc.it.t) || (cc.it.t === 'screen' && cc.it.key)) && ((px - cc.x) / (cc.rx * (cc.it.t === 'screen' ? 1.6 : 1))) ** 2 + ((py - cc.y) / cc.ry) ** 2 <= 1);
+        return c ? { c, upper: py < c.y, src: layout.rows[c.ri][c.ci], id: `${c.ri},${c.ci}` } : null;
       };
-      const name = (c) => (c.it.label || c.it.text || '').replace(/\n/g, ' ');
-      m.userData.hint = (uv) => {
-        const c = hit(uv);
-        if (!c) return null;
-        const k = c.it.key || '';
-        const note = k.startsWith('light.') || k === 'apu' ? ' (linked to aircraft)' : k.startsWith('sw.') || k.startsWith('act.') ? ' (live systems)' : '';
-        return `${name(c)} · click to ${c.it.t === 'button' ? 'press' : c.it.t === 'knob' ? 'turn' : 'switch'}${note}`;
+      m.userData.hint = (uv) => { const h = hit(uv); return h ? hintFor(h.src, h.c.it, overrides[h.id]) : null; };
+      m.userData.interact = ({ uv, shift }) => {
+        const h = hit(uv);
+        if (!h) return null;
+        const r = operate(h.src, h.c.it, h.id, overrides, { shift, upper: h.upper, repaint: () => { S = null; paint(true); } }) || {};
+        S = null; paint(true);
+        return { handled: true, ok: r.ok !== false, message: r.message };
       };
-      m.userData.interact = ({ uv }) => {
-        const c = hit(uv);
-        if (!c) return null;
-        const id = `${c.ri},${c.ci}`;
-        const key = c.it.key;
-        if (key && key.startsWith('light.')) {
-          const r = systems.set(key, !systems.get(key));
-          return { handled: true, ok: r.ok, message: r.message };
-        }
-        if (key === 'apu') {
-          const r = systems.set('apu', !systems.get('apu'));
-          return { handled: true, ok: r.ok, message: r.message };
-        }
-        if (key && key.startsWith('sw.')) {
-          const cur = systems.get(key);
-          const next = key === 'sw.iso' ? { AUTO: 'OPEN', OPEN: 'CLOSE', CLOSE: 'AUTO' }[cur] : !cur;
-          const r = systems.set(key, next);
-          redrawNow();
-          return { handled: true, ok: r.ok, message: r.message };
-        }
-        if (key && key.startsWith('act.')) {
-          const r = systems.set(key, true);
-          redrawNow();
-          return { handled: true, ok: r.ok, message: r.message };
-        }
-        const o = (overrides[id] = overrides[id] || {});
-        if (c.it.t === 'toggle' || c.it.t === 'guard') o.on = !(o.on ?? c.it.on ?? false);
-        else if (c.it.t === 'knob') {
-          const steps = [-0.8, 0, 0.8];
-          const curA = o.angle ?? c.it.angle ?? -0.6;
-          const i = steps.findIndex((s) => s > curA + 0.01);
-          o.angle = i === -1 ? steps[0] : steps[i];
-        } else if (c.it.t === 'button') {
-          o.lit = c.it.lit ? null : '#e8e2c8';
-          redrawNow();
-          setTimeout(() => { delete o.lit; redrawNow(); }, 220);
-          return { handled: true, ok: true };
-        }
-        redrawNow();
-        return { handled: true, ok: true };
+      m.userData.wheel = ({ uv, dir }) => {
+        const h = hit(uv);
+        if (!h) return null;
+        const it = h.src;
+        if (!(it.t === 'knob' && it.values) && !(it.t === 'screen' && it.key)) return null;
+        operate(it, h.c.it, h.id, overrides, { shift: dir < 0, wheel: true });
+        S = null; paint(true);
+        return { handled: true };
       };
     }
-    // custom-drawn panels can declare click / scroll regions (normalized canvas coords, y from the top)
     if (opts.regions) {
       const find = (uv) => {
         if (!uv) return null;
         const px = uv.x, py = 1 - uv.y;
         return opts.regions.find((r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) || null;
       };
-      m.userData.hint = (uv) => find(uv)?.hint || null;
+      m.userData.hint = (uv) => { const r = find(uv); return r ? (typeof r.hint === 'function' ? r.hint() : r.hint) : null; };
       m.userData.interact = ({ uv, shift }) => {
         const r = find(uv);
         if (!r?.act) return null;
         const res = r.act(shift) || {};
-        redrawNow();
+        S = null; paint(true);
         return { handled: true, ok: res.ok !== false, message: res.message };
       };
       m.userData.wheel = ({ uv, dir }) => {
         const r = find(uv);
         if (!r?.wheel) return null;
-        r.wheel(dir);
-        redrawNow();
+        r.wheel(dir); S = null; paint(true);
         return { handled: true };
       };
     }
-    if (opts.state) {
-      let last = '';
-      dynamic.push(() => { const st = opts.state(); const sig = JSON.stringify(st); if (sig !== last) { last = sig; redraw(st); } });
-    }
+    const dynamic = !!(layout || opts.state);
+    zones.push({ mesh: m, refresh: (force) => { if (dynamic || force) paint(force); } });
     return m;
   }
-  function resolveLayout(layout, state = {}, overrides = {}) {
-    return {
-      ...layout,
-      rows: layout.rows.map((row, ri) => row.map((it, ci) => {
-        let out = it;
-        const o = overrides[`${ri},${ci}`];
-        if (o) out = { ...out, ...Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null)) };
-        if (!it.key) return out;
-        if (it.key === 'le') return { ...out, lit: state.le?.[it.i] > 0, color: state.le?.[it.i] === 1 ? 'amber' : 'green' };
-        if (it.key === 'apuGen') return { ...out, lit: !!state.apuGen };
-        if (it.key === 'apu') return { ...out, angle: state.apu ? 0.7 : -0.7 };
-        if (it.key.startsWith('light.')) return { ...out, on: !!state[it.key] };
-        if (it.key === 'sw.iso') return { ...out, angle: { AUTO: 0, OPEN: 0.8, CLOSE: -0.8 }[state['sw.iso']] ?? 0 };
-        if (it.key.startsWith('sw.')) return it.t === 'knob' ? { ...out, angle: state[it.key] ? 0.8 : -0.8 } : { ...out, on: !!state[it.key] };
-        if (it.key.startsWith('act.elec.')) return { ...out, on: (state.elecSrc || []).includes(it.key.slice(9)) };
-        if (it.key.startsWith('ann.')) return { ...out, lit: !!state.ann?.[it.key.slice(4)] };
-        return out;
-      })),
-    };
-  }
-  const L = (id) => LAYOUTS[id];
-  const sysState = () => systems.state;
-  const ann = () => systems.annunciators();
 
-  // ---- cockpit-only state: MCP settings and master caution memory.
-  // Switch positions and system logic live in the shared systems controller (systems.panel()).
+  // ---- layout resolution: live values for every control
+  function resolveLayout(layout, S0, overrides) {
+    const sig = [];
+    const rows = layout.rows.map((row, ri) => row.map((it, ci) => {
+      const o = overrides[`${ri},${ci}`] || {};
+      const out = { ...it };
+      // multi-position value (state key, get(), or a local value)
+      let val;
+      if (it.get) val = it.get(S0);
+      else if (it.key && it.values) val = S0.s(it.key);
+      else if (it.values) val = o.v ?? it.v ?? it.values[0];
+      if (it.values && (it.t === 'toggle' || it.t === 'guard')) {
+        const i = Math.max(0, it.values.indexOf(val));
+        out.pos = o.pos ?? (it.values.length === 3 ? [1, 0, -1][i] : i === 0 ? 1 : -1);
+      } else if (it.t === 'toggle' || it.t === 'guard') {
+        if (o.pos !== undefined) out.pos = o.pos;
+        else if (it.key?.startsWith('act.elec.')) out.on = [S0.p.elec.bus1, S0.p.elec.bus2].includes(it.key.slice(9));
+        else if (it.key) out.on = !!S0.s(it.key);
+        else if (o.on !== undefined) out.on = o.on;
+      }
+      if (it.t === 'knob') {
+        if (it.values) {
+          const n = it.values.length, i = Math.max(0, it.values.indexOf(val)), sw = it.sweep ?? 1.6;
+          out.angle = it.angles ? it.angles[i] : n === 1 ? 0 : -sw / 2 + (i / (n - 1)) * sw;
+          if (!it.marks) out.marks = it.values;
+        } else if (it.key === 'apu') out.angle = S0.s('apu') ? 0 : -0.7;
+        else if (it.key) out.angle = S0.s(it.key) ? 0.8 : -0.8;
+        else if (o.angle !== undefined) out.angle = o.angle;
+      }
+      if (it.t === 'annun') {
+        if (it.le !== undefined) { const le = leState(); out.lit = le > 0; out.color = le === 1 ? 'amber' : 'green'; } else out.lit = it.lit ? !!it.lit(S0) : false;
+      }
+      if (it.t === 'button') {
+        out.lit = o.lit !== undefined ? o.lit : it.litFn ? it.litFn(S0) : it.lit ?? null;
+        if (it.textFn) out.text = it.textFn(S0);
+      }
+      if (it.t === 'screen' && typeof it.text === 'function') out.text = it.text(S0);
+      if (it.t === 'gauge') {
+        if (typeof it.value === 'function') out.value = it.value(S0);
+        if (it.face) { const f = it.face(S0); out.face = f; sig.push(String(f)); }
+      }
+      sig.push(out.pos ?? '', out.on ? 1 : 0, out.angle ?? '', out.lit ?? '', out.text ?? '', out.value ?? '');
+      return out;
+    }));
+    // gauge faces are closures; include their inputs via the panel snapshot of pressurization/oxygen/brakes
+    const pz = S0.p.pressurization, ox = S0.p.oxygen, gb = S0.p.gearbrakes;
+    if (layout.rows.some((r) => r.some((it) => it.face))) sig.push(pz?.cabinAlt, pz?.diff, pz?.rate, pz?.outflow, ox?.crewPressure, gb?.accumulator);
+    return { layout: { ...layout, rows }, sig: sig.join('|') };
+  }
+  const leState = () => { const a = snap().a; return a.leTransit.state !== 'off' ? 1 : a.leExt.state !== 'off' ? 2 : 0; };
+
+  const nm = (it) => String(it.name || it.label || (typeof it.text === 'string' ? it.text : '') || it.top || '').replace(/\n/g, ' ').trim() || 'Selector';
+  function curValue(src, res, o) {
+    if (src.get) return src.get(snap());
+    if (src.values) return src.key ? getS(src.key) : (o?.v ?? src.v ?? src.values[0]);
+    if (src.key) return getS(src.key);
+    return null;
+  }
+  function hintFor(src, res, o) {
+    const k = src.key || '';
+    const live = k.startsWith('light.') || k === 'apu' ? ' (linked to aircraft)' : k || src.get || src.up || src.toggleKey ? ' (live systems)' : '';
+    const v = curValue(src, res, o);
+    const pos = src.values ? ` · ${String(v).replace(/\n/g, ' ')}` : (src.t === 'toggle' || src.t === 'guard') && k && !k.startsWith('act.') ? ` · ${v ? (src.marks?.[0] || 'ON') : (src.marks?.[1] || 'OFF')}` : '';
+    if (src.t === 'screen') return `${nm(src)} ${res.text} · click +, Shift+click −, or scroll${live}`;
+    if (src.up) return `${nm(src)} · click upper half: ${(src.marks?.[0] || 'up').replace(/\n/g, '')}, lower half: ${(src.marks?.[2] || 'down').replace(/\n/g, '')}${live}`;
+    if (src.t === 'knob' && src.values) return `${nm(src)}${pos} · click next, Shift+click back, or scroll${live}`;
+    if ((src.t === 'toggle' || src.t === 'guard') && src.values?.length === 3) return `${nm(src)}${pos} · click upper half to move up, lower half to move down${src.t === 'guard' ? ' (guarded)' : ''}${live}`;
+    return `${nm(src)}${pos} · click to ${src.t === 'button' ? 'press' : src.t === 'knob' ? 'turn' : 'switch'}${src.t === 'guard' ? ' (guarded)' : ''}${live}`;
+  }
+  function operate(src, res, id, overrides, { shift, upper, wheel, repaint }) {
+    const o = (overrides[id] = overrides[id] || {});
+    const step = (list, cur, d) => list[Math.max(0, Math.min(list.length - 1, list.indexOf(cur) + d))];
+    const momentary = (pos) => { o.pos = pos; setTimeout(() => { delete o.pos; repaint?.(); }, 450); };
+    if (src.t === 'screen' && src.key) {
+      const cur = Number(getS(src.key)) || 0;
+      const nv = Math.max(src.min ?? -Infinity, Math.min(src.max ?? Infinity, cur + (shift ? -1 : 1) * src.step));
+      return trySet(src.key, nv);
+    }
+    if (src.t === 'button') {
+      if (src.toggleKey) return trySet(src.toggleKey, !getS(src.toggleKey));
+      const r = src.key ? trySet(src.key, true) : { ok: true };
+      if (!src.litFn) { o.lit = '#e8e2c8'; setTimeout(() => { delete o.lit; repaint?.(); }, 220); }
+      return r;
+    }
+    if (src.up) { // spring-loaded: upper half / lower half
+      momentary(upper ? 1 : -1);
+      const k = upper ? src.up : src.down;
+      return k ? trySet(k, true) : { ok: true };
+    }
+    if (src.values) {
+      const cur = curValue(src, res, o);
+      let next;
+      if ((src.t === 'toggle' || src.t === 'guard') && src.values.length === 3) next = step(src.values, cur, upper ? -1 : 1);
+      else if (src.t === 'toggle' || src.t === 'guard') next = src.values[(src.values.indexOf(cur) + 1) % src.values.length];
+      else next = wheel ? step(src.values, cur, shift ? -1 : 1) : shift ? step(src.values, cur, -1) : src.values[(src.values.indexOf(cur) + 1) % src.values.length];
+      if (src.spring) { momentary(src.values.indexOf(next) === 0 ? 1 : -1); return { ok: true }; }
+      if (src.put) return src.put(next, trySet);
+      if (src.key) return trySet(src.key, next);
+      o.v = next; return { ok: true };
+    }
+    if (src.key) {
+      if (src.key.startsWith('act.')) return trySet(src.key, true);
+      if (src.key === 'apu') return trySet('apu', !getS('apu'));
+      return trySet(src.key, !getS(src.key));
+    }
+    if (src.t === 'toggle' || src.t === 'guard') { o.on = !(o.on ?? src.on ?? false); return { ok: true }; }
+    if (src.t === 'knob') { const steps = [-0.8, 0, 0.8]; const cur = o.angle ?? src.angle ?? -0.6; const i = steps.findIndex((s) => s > cur + 0.01); o.angle = i === -1 ? steps[0] : steps[i]; }
+    return { ok: true };
+  }
+
+  // ---- cockpit-only state: MCP settings, EFIS ranges and master caution memory
   const fd = {
     mcp: { spd: 250, hdg: 10, alt: 10000, vs: 0, crs: 10, modes: [], cmdA: false, cmdB: false, at: false, fdL: true, fdR: true },
+    range: { L: 20, R: 20 },
     ack: null, recallUntil: 0, t: 0,
   };
-  const computeAnn = () => systems.panel();
   function cautionState() {
-    const { cats } = computeAnn();
-    if (!fd.ack) fd.ack = new Set(cats); // cold cockpit: existing cautions start acknowledged
-    for (const c of [...fd.ack]) if (!cats.has(c)) fd.ack.delete(c); // cleared cautions re-arm
+    const { cats } = snap().p;
+    if (!fd.ack) fd.ack = new Set(cats);
+    for (const c of [...fd.ack]) if (!cats.has(c)) fd.ack.delete(c);
     const fresh = [...cats].filter((c) => !fd.ack.has(c));
     const recall = fd.t < fd.recallUntil;
-    return { mc: fresh.length > 0 || (recall && cats.size > 0), six: recall ? [...cats] : fresh };
+    return { mc: fresh.length > 0 || (recall && cats.size > 0), six: recall ? [...cats] : fresh, fire: !!snap().p.fire?.warn };
   }
-  const panelState = () => {
-    const p = systems.panel();
-    return { ...systems.state, apuGen: ann().apuGen.state !== 'off', ann: p.ann, elecSrc: [p.elec.bus1, p.elec.bus2] };
-  };
 
-  // ---- MCP behaviour
+  // MCP behaviour
   const MCP_GROUPS = [['N1', 'SPEED'], ['VNAV', 'LVL CHG', 'ALT HLD', 'V/S'], ['HDG SEL', 'LNAV', 'VOR LOC', 'APP']];
   const STEP = { spd: 5, hdg: 5, alt: 500, vs: 100, crs: 5 };
   function adjust(id, dir) {
@@ -561,10 +614,11 @@ export function buildFlightDeck(systems) {
       m[k] = !m[k];
       return {};
     }
+    if (mode === 'CWS A' || mode === 'CWS B') return { ok: true, message: 'Control wheel steering is not modelled here.' };
     if (m.modes.includes(mode)) { m.modes = m.modes.filter((x) => x !== mode); return {}; }
     const group = MCP_GROUPS.find((g) => g.includes(mode)) || [];
     m.modes = m.modes.filter((x) => !group.includes(x));
-    if (mode === 'APP') m.modes = m.modes.filter((x) => !MCP_GROUPS[1].includes(x)); // APP flies the glideslope
+    if (mode === 'APP') m.modes = m.modes.filter((x) => !MCP_GROUPS[1].includes(x));
     m.modes.push(mode);
     return {};
   }
@@ -575,305 +629,489 @@ export function buildFlightDeck(systems) {
     const pitch = has('VNAV') ? 'VNAV PTH' : has('LVL CHG') ? 'MCP SPD' : has('ALT HLD') ? 'ALT HOLD' : has('V/S') ? 'V/S' : has('APP') ? 'G/S' : '';
     return [thrust, roll, pitch];
   }
+  const winById = Object.fromEntries(D.MCP.windows.map((w) => [w.id, w]));
   const mcpRegions = [
-    ...MCP.windows.map((w) => ({
-      x: w.x, y: MCP.winY - 0.12, w: w.w, h: MCP.winH + 0.12,
-      hint: `${w.label} · click +, Shift+click −, or scroll`,
-      act: (shift) => adjust(w.id, shift ? -1 : 1), wheel: (dir) => adjust(w.id, dir),
-    })),
-    ...MCP.buttons.map(([t, x]) => ({ x, y: MCP.btnY, w: MCP.btnW, h: MCP.btnH, hint: `${t} · click to ${t.startsWith('CMD') ? 'engage / disengage' : 'select'}`, act: () => pressMode(t) })),
-    ...MCP.toggles.map(([key, lab, x]) => ({ x: x - 0.022, y: 0.55, w: 0.044, h: 0.42, hint: `${lab} switch · click to toggle`, act: () => { fd.mcp[key] = !fd.mcp[key]; } })),
+    ...D.MCP.knobs.map((k) => {
+      const w = winById[k.id];
+      const x0 = Math.min(w.x, k.x - 0.03), x1 = Math.max(w.x + w.w, k.x + 0.03);
+      return { x: x0, y: 0.05, w: x1 - x0, h: 0.9, hint: `${w.label} · click +, Shift+click −, or scroll`, act: (shift) => adjust(w.key, shift ? -1 : 1), wheel: (dir) => adjust(w.key, dir) };
+    }),
+    ...D.MCP.buttons.map(([t, x, y]) => ({ x: x - D.MCP.btnW / 2, y: y - D.MCP.btnH / 2, w: D.MCP.btnW, h: D.MCP.btnH, hint: `${t} · click to ${t.startsWith('CMD') ? 'engage / disengage' : 'select'}`, act: () => pressMode(t) })),
+    ...D.MCP.toggles.map(([key, lab, x]) => ({ x: x - 0.02, y: 0.5, w: 0.04, h: 0.45, hint: () => `${lab} switch · ${fd.mcp[key] ? 'ON' : 'OFF'} · click to toggle`, act: () => { fd.mcp[key] = !fd.mcp[key]; } })),
+    { x: 0.83, y: 0.84, w: 0.08, h: 0.12, hint: 'A/P DISENGAGE bar · click to disengage the autopilots', act: () => { fd.mcp.cmdA = fd.mcp.cmdB = false; } },
   ];
+  // the regions must be checked buttons first (they sit inside the wide knob columns)
+  mcpRegions.sort((a, b) => a.w * a.h - b.w * b.h);
   const mcRegions = [
-    { x: 0.54, y: 0.08, w: 0.38, h: 0.38, hint: 'MASTER CAUTION · click to reset', act: () => { fd.ack = new Set(computeAnn().cats); fd.recallUntil = 0; } },
-    { x: 0.08, y: 0.08, w: 0.38, h: 0.38, hint: 'FIRE WARN · lit with a fire warning; press to silence the bell', act: () => ({}) },
+    { x: 0.54, y: 0.08, w: 0.38, h: 0.38, hint: 'MASTER CAUTION · click to reset', act: () => { fd.ack = new Set(snap().p.cats); fd.recallUntil = 0; } },
+    { x: 0.08, y: 0.08, w: 0.38, h: 0.38, hint: 'FIRE WARN · lit with a fire warning · press to silence the bell and reset', act: () => trySet('act.fire.bellCutout', true) },
     { x: 0.05, y: 0.54, w: 0.92, h: 0.42, hint: 'System annunciator · click to recall cautions', act: () => { fd.recallUntil = fd.t + 2.5; } },
   ];
 
   // ---- main instrument panel (P1 / P2 / P3)
   const mainPanel = facing(V(0.88, 0.8, 0), V(-1, 0.2, 0));
-  const backing = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.56), mats.panel);
-  mainPanel.add(backing);
-  box(0.2, 0.62, 2.04, mats.panel, [1.08, 0.78, 0]); // structure behind the tilted panel (kept clear of its face)
+  {
+    // panel body with the centre section running down to the pedestal
+    const s = new THREE.Shape();
+    s.moveTo(-0.98, 0.28); s.lineTo(0.98, 0.28); s.lineTo(0.98, -0.25); s.lineTo(0.36, -0.27); s.lineTo(0.34, -0.42); s.lineTo(-0.34, -0.42); s.lineTo(-0.36, -0.27); s.lineTo(-0.98, -0.25); s.closePath();
+    const body = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.03, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2 }), mats.panel);
+    body.position.z = -0.04; body.castShadow = true; body.receiveShadow = true;
+    mainPanel.add(body);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.66, 1.98), mats.panelDark);
+    back.position.set(1.06, 0.76, 0); root.add(back);
+  }
+  const air = () => !getS('onGround');
+  const altNow = () => (air() ? Number(getS('altitude')) || 35000 : 0);
+  const iasNow = () => (air() ? (altNow() > 20000 ? 280 : 250) : 0);
   const pfdState = () => {
-    const st = sysState();
-    const air = !st.onGround;
-    const m = fd.mcp;
+    const st = systems.state;
+    const m = fd.mcp, alt = altNow(), ias = iasNow();
+    const tas = ias * (1 + alt / 1000 * 0.02);
     return {
-      pitch: air ? 2.5 : 0, bank: air ? -st.roll * 18 : 0, speed: air ? 250 : 0, alt: air ? 10000 : 0, hdg: 10,
-      fma: fma(), cmd: m.cmdA || m.cmdB ? 'CMD' : m.fdL || m.fdR ? 'FD' : '', selSpd: m.spd, selAlt: m.alt,
+      pitch: air() ? 2.5 + st.pitch * 6 : st.pitch * 3, bank: air() ? -st.roll * 18 : 0, speed: ias, alt: Math.round(alt), hdg: 10, vs: 0,
+      mach: tas / (alt > 36000 ? 573 : 661 - alt * 0.0024), onGround: !air(), selHdg: m.hdg,
+      fma: fma(), armed: ['', m.modes.includes('VOR LOC') || m.modes.includes('APP') ? 'VOR/LOC' : '', m.modes.includes('APP') ? 'G/S' : ''],
+      cmd: m.cmdA || m.cmdB ? 'CMD' : m.fdL || m.fdR ? 'FD' : '', fd: m.fdL || m.fdR, fdP: 0, fdR: 0, selSpd: m.spd, selAlt: m.alt,
     };
   };
+  const ndState = (side) => () => {
+    const ias = iasNow(), alt = altNow();
+    const tas = ias * (1 + alt / 1000 * 0.02);
+    return { hdg: fd.mcp.hdg, trk: 10, hdgSel: fd.mcp.modes.includes('HDG SEL'), range: fd.range[side], gs: air() ? tas - 20 : 0, tas: air() ? tas : 0 };
+  };
   for (const s of [-1, 1]) {
-    zone(mainPanel, 'fd-pfd', 0.205, 0.205, s * 0.71, 0.03, drawPFD, { screen: true, state: pfdState, side: s < 0 ? 'L' : 'R' });
-    zone(mainPanel, 'fd-nd', 0.205, 0.205, s * 0.475, 0.03, drawND, { screen: true, side: s < 0 ? 'L' : 'R', state: () => ({ hdg: fd.mcp.hdg }) });
+    const side = s < 0 ? 'L' : 'R';
+    bezel(mainPanel, 0.205, 0.205, s * 0.65, -0.01);
+    bezel(mainPanel, 0.205, 0.205, s * 0.415, -0.01);
+    zone(mainPanel, 'fd-pfd', 0.205, 0.205, s * 0.65, -0.01, D.drawPFD, { screen: true, state: pfdState, side, z: 0.002 });
+    zone(mainPanel, 'fd-nd', 0.205, 0.205, s * 0.415, -0.01, D.drawND, { screen: true, side, state: ndState(side), z: 0.002 });
+    // outboard column: warning lights, clock, display select
+    zone(mainPanel, 'fd-main-warnings', 0.11, 0.085, s * 0.9, 0.2, WARN_LIGHTS, { side });
+    zone(mainPanel, 'fd-clock', 0.11, 0.11, s * 0.9, 0.08, D.drawClock, { side, state: () => ({ t: Math.floor(Date.now() / 20000) }) });
+    zone(mainPanel, 'fd-display-select', 0.11, 0.17, s * 0.9, -0.08, DISPLAY_SELECT, { side });
+    // status strip above the PFD/ND
+    zone(mainPanel, 'fd-main-warnings', 0.46, 0.04, s * 0.532, 0.125, STATUS_STRIP, { side });
   }
-  zone(mainPanel, 'fd-upper-du', 0.205, 0.205, 0.0, 0.05, drawEngines, {
-    screen: true,
+  bezel(mainPanel, 0.205, 0.205, 0, 0.03);
+  zone(mainPanel, 'fd-upper-du', 0.205, 0.205, 0.0, 0.03, D.drawEngines, {
+    screen: true, z: 0.002,
     state: () => {
-      const st = sysState(); const a = ann();
-      const eng = systems.panel().eng;
+      const st = systems.state, a = snap().a, eng = snap().p.eng;
       const n1For = (run) => (!run ? 0 : st.onGround ? 21.5 : 84.6);
       const egtFor = (run) => (!run ? 22 : st.onGround ? 450 : 712);
-      return { n1L: n1For(eng.run1), n1R: n1For(eng.run2), egtL: egtFor(eng.run1), egtR: egtFor(eng.run2), rev: a.rev.state === 'off' ? '' : a.rev.state };
+      return { n1L: n1For(eng.run1), n1R: n1For(eng.run2), egtL: egtFor(eng.run1), egtR: egtFor(eng.run2), rev: a.rev.state === 'off' ? '' : a.rev.state, thrMode: st.onGround ? 'TO' : 'CRZ' };
     },
   });
-  zone(mainPanel, 'fd-standby', 0.1, 0.1, -0.205, 0.08, drawISFD, { screen: true });
-  zone(mainPanel, 'fd-gear-panel', 0.15, 0.26, 0.205, 0.0, drawGearPanel, {
-    state: () => { const a = ann(); return { gear: a.gearN.state, leTransit: a.leTransit.state !== 'off', leExt: a.leExt.state !== 'off', flap: parseFloat(systems.readout('flapGauge')) || 0 }; },
+  bezel(mainPanel, 0.1, 0.1, -0.205, 0.09, 0.01);
+  zone(mainPanel, 'fd-standby', 0.1, 0.1, -0.205, 0.09, D.drawISFD, { screen: true, z: 0.002, state: () => { const p = pfdState(); return { pitch: p.pitch, bank: p.bank, speed: p.speed, alt: p.alt, hdg: p.hdg }; } });
+  zone(mainPanel, 'fd-flap-gauge', 0.13, 0.15, -0.205, -0.055, D.drawFlapPanel, {
+    state: () => { const a = snap().a; return { leTransit: a.leTransit.state !== 'off', leExt: a.leExt.state !== 'off', flap: parseFloat(systems.readout('flapGauge')) || 0 }; },
   });
-
-  // gear lever (3D, on the main panel)
+  zone(mainPanel, 'fd-gear-panel', 0.13, 0.27, 0.205, -0.005, D.drawGearPanel, {
+    state: () => ({ gear: snap().a.gearN.state }),
+  });
+  // gear lever: wheel-shaped knob on a stem
   const gearLever = new THREE.Group();
-  gearLever.position.set(0.31, 0.02, 0.02);
+  gearLever.position.set(0.205, -0.05, 0.01);
   mainPanel.add(gearLever);
   {
-    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.012, 0.08), mats.metal);
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.012, 0.075), mats.chrome);
     stem.position.z = 0.04;
-    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.03, 20), mats.wall);
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.026, 28), mats.white);
     knob.rotation.x = Math.PI / 2; knob.position.z = 0.085;
-    [stem, knob].forEach((m) => { m.userData.partId = 'fd-gear-panel'; gearLever.add(m); });
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.004, 8, 28), mats.white); rim.position.z = 0.085;
+    [stem, knob, rim].forEach((mm) => { mm.userData.partId = 'fd-gear-panel'; mm.castShadow = true; gearLever.add(mm); });
   }
 
   // ---- glareshield (P7)
-  box(0.36, 0.06, 2.04, mats.glare, [0.89, 1.07, 0]); // glareshield top, kept behind the slanted MCP face
-  const glare = facing(V(0.63, 1.01, 0), V(-1, 0.75, 0));
-  const glareFace = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.12), mats.glare);
-  glare.add(glareFace);
-  zone(glare, 'fd-mcp', 0.66, 0.1, 0, 0, drawMCP, {
-    state: () => ({ ...fd.mcp, modes: [...fd.mcp.modes] }), regions: mcpRegions,
+  const glare = facing(V(0.689 - 0.8 * 0.016, 1.035 + 0.6 * 0.016, 0), V(-0.8, 0.58, 0));
+  {
+    const housing = new THREE.Mesh(new RoundedBoxGeometry(0.69, 0.104, 0.03, 3, 0.006), mats.panelDark);
+    housing.position.z = -0.006; housing.castShadow = true; glare.add(housing);
+  }
+  zone(glare, 'fd-mcp', 0.66, 0.094, 0, 0, (ctx, W, H, st, g) => D.drawMCP(ctx, W, H, st, g), {
+    state: () => ({ ...fd.mcp, modes: [...fd.mcp.modes] }), regions: mcpRegions, z: 0.0105,
   });
+  // MCP 3D knobs (rotate as values change)
+  const mcpKnobs = D.MCP.knobs.map((k) => {
+    const sc = 0.094 * k.r * 2.1;
+    const lx = (k.x - 0.5) * 0.66, ly = (0.5 - k.y) * 0.094;
+    return { k, slot: kit.add('knobRound', glare, lx, ly, 0.011, sc) };
+  });
+  const efisLayout = (side) => ({ rows: [
+    [K('MINS', { style: 'round', angle: 0, values: ['RADIO', 'BARO'], v: 'BARO', marks: ['RADIO', 'BARO'] }), B('RST', { scale: 0.8 }), K('BARO', { style: 'round', angle: 0, values: ['IN', 'HPA'], v: 'IN', marks: ['IN', 'HPA'] }), B('STD', { scale: 0.8 })],
+    [B('FPV', { scale: 0.8 }), B('MTRS', { scale: 0.8 }), K('MODE', { values: ['APP', 'VOR', 'MAP', 'PLN'], v: 'MAP', sweep: 1.8 }), B('CTR', { scale: 0.8 }), B('TFC', { scale: 0.8 }),
+      K('RANGE', { values: ['5', '10', '20', '40', '80', '160', '320', '640'], sweep: 2.6, markSize: 0.16, get: () => String(fd.range[side]), put: (v) => { fd.range[side] = Number(v); return { ok: true, message: `ND range ${v} NM` }; } })],
+    ['WXR', 'STA', 'WPT', 'ARPT', 'DATA', 'POS', 'TERR'].map((t) => B(t, { ts: 0.22, scale: 0.8 })),
+  ] });
   for (const s of [-1, 1]) {
     const side = s < 0 ? 'L' : 'R';
-    zone(glare, 'fd-efis-panels', 0.2, 0.1, s * 0.47, 0, L('fd-efis-panels'), { side });
-    zone(glare, 'fd-master-caution', 0.14, 0.1, s * 0.66, 0, drawMasterCaution, {
+    zone(glare, 'fd-efis-panels', 0.2, 0.094, s * 0.455, 0, efisLayout(side), { side });
+    zone(glare, 'fd-master-caution', 0.14, 0.094, s * 0.665, 0, (ctx, W, H, st, g) => D.drawMasterCaution(ctx, W, H, st, g), {
       side, regions: mcRegions, state: () => ({ ...cautionState(), side }),
     });
   }
 
   // ---- forward overhead (P5)
   const ovh = facing(V(0.33, 1.85, 0), V(-0.36, -0.93, 0));
-  ovh.add(new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.72), mats.panel));
-  const cw = 0.168, x0 = -0.42;
+  {
+    const box = new THREE.Mesh(new RoundedBoxGeometry(0.96, 0.8, 0.09, 3, 0.012), mats.panelDark);
+    box.position.z = -0.05; box.castShadow = true; box.receiveShadow = true; ovh.add(box);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.93, 0.77), mats.panel); face.position.z = -0.004; face.receiveShadow = true; ovh.add(face);
+  }
+  const cw = 0.18, x0 = -0.45;
   const col = (i) => x0 + cw * (i + 0.5);
-  const yTop = 0.34, yBot = -0.2;
-  const place = (id, ci, y1, y2, layoutId = id) =>
-    zone(ovh, id, cw - 0.006, (y2 - y1) - 0.006, col(ci), (y1 + y2) / 2, L(layoutId), {
-      state: LAYOUTS[layoutId].rows.some((r) => r.some((it) => it.key)) ? panelState : null,
-    });
-  place('fd-flight-controls', 0, 0.06, yTop);
-  place('fd-nav-displays', 0, -0.06, 0.06);
-  place('fd-fuel', 0, yBot, -0.06);
-  place('fd-electrical', 1, 0.0, yTop);
-  place('fd-apu', 1, yBot, 0.0);
+  const yTop = 0.37, yBot = -0.24;
+  const place = (id, ci, y1, y2, layoutId = id) => zone(ovh, id, cw - 0.006, (y2 - y1) - 0.006, col(ci), (y1 + y2) / 2, LAYOUTS[layoutId]);
+  place('fd-flight-controls', 0, 0.12, yTop);
+  place('fd-nav-displays', 0, 0.03, 0.12);
+  place('fd-fuel', 0, yBot, 0.03);
+  place('fd-electrical', 1, -0.06, yTop);
+  place('fd-apu', 1, yBot, -0.06);
   place('fd-cabin-signs', 2, 0.12, yTop);
   place('fd-window-probe-heat', 2, yBot, 0.12);
-  place('fd-anti-ice', 3, 0.12, yTop);
-  place('fd-hydraulics', 3, yBot, 0.12);
-  place('fd-air-conditioning', 4, 0.15, yTop);
-  place('fd-bleed-air', 4, -0.03, 0.15);
-  place('fd-pressurization', 4, yBot, -0.03);
+  place('fd-anti-ice', 3, 0.19, yTop);
+  place('fd-hydraulics', 3, 0.01, 0.19);
+  place('fd-doors', 3, yBot, 0.01);
+  place('fd-air-conditioning', 4, 0.19, yTop);
+  place('fd-bleed-air', 4, -0.01, 0.19);
+  place('fd-cabin-altitude', 4, -0.1, -0.01);
+  place('fd-pressurization', 4, yBot, -0.1);
   // bottom row (forward edge)
-  const lightsState = () => ({ ...sysState() });
-  zone(ovh, 'fd-exterior-lights', 0.33, 0.13, -0.255, -0.28, L('fd-exterior-lights'), { state: lightsState });
-  zone(ovh, 'fd-engine-start', 0.18, 0.13, 0.0, -0.28, L('fd-engine-start'));
-  zone(ovh, 'fd-exterior-lights', 0.33, 0.13, 0.255, -0.28, L('fd-exterior-lights-2'), { state: lightsState });
+  zone(ovh, 'fd-exterior-lights', 0.34, 0.12, -0.28, -0.31, LAYOUTS['fd-exterior-lights']);
+  zone(ovh, 'fd-engine-start', 0.2, 0.12, 0.0, -0.31, LAYOUTS['fd-engine-start']);
+  zone(ovh, 'fd-exterior-lights', 0.34, 0.12, 0.28, -0.31, LAYOUTS['fd-exterior-lights-2']);
 
   // ---- aft overhead
   const aft = facing(V(-0.25, 1.99, 0), V(-0.08, -1, 0));
-  aft.add(new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.42), mats.panel));
-  zone(aft, 'fd-irs', 0.27, 0.36, -0.29, 0, L('fd-irs'));
-  zone(aft, 'fd-le-devices', 0.27, 0.36, 0, 0, L('fd-le-devices'), {
-    state: () => { const a = ann(); const ext = a.leExt.state !== 'off'; const tr = a.leTransit.state !== 'off'; return { le: Array.from({ length: 12 }, () => (tr ? 1 : ext ? 2 : 0)) }; },
-  });
-  zone(aft, 'fd-engine-eec', 0.27, 0.36, 0.29, 0, L('fd-engine-eec'));
-
-  // ---- pedestal
-  box(0.36, 0.5, 0.66, mats.panel, [0.58, 0.25, 0]);
-  box(0.46, 0.6, 0.42, mats.panel, [0.18, 0.3, 0]);
-  box(0.56, 0.58, 0.44, mats.panel, [-0.3, 0.29, 0]);
-  const fwdElec = facing(V(0.6, 0.6, 0), V(-0.75, 0.66, 0));
-  fwdElec.add(new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.32), mats.panel));
-  for (const s of [-1, 1]) zone(fwdElec, 'fd-cdu', 0.2, 0.29, s * 0.225, 0, drawCDU, { side: s < 0 ? 'L' : 'R' });
-  zone(fwdElec, 'fd-lower-du', 0.2, 0.2, 0, 0.03, drawLowerDU, { screen: true });
-
-  // control stand
-  const cs = facing(V(0.19, 0.62, 0), V(-0.12, 1, 0));
   {
-    const c = makeCanvas(0.42, 0.42);
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#4c545e'; ctx.fillRect(0, 0, c.width, c.height);
-    ctx.fillStyle = '#111'; const W = c.width, H = c.height;
-    [[0.12, 'SPEED BRAKE'], [0.88, 'FLAPS']].forEach(([x]) => ctx.fillRect(W * x - 4, H * 0.12, 8, H * 0.62));
-    [0.42, 0.58].forEach((x) => ctx.fillRect(W * x - 5, H * 0.1, 10, H * 0.66));
-    drawLabel(ctx, 'SPEED\nBRAKE', W * 0.12, H * 0.06, H * 0.03, '#fff');
-    drawLabel(ctx, 'FLAPS', W * 0.88, H * 0.06, H * 0.03, '#fff');
-    ['DOWN', 'ARMED', 'FLT DET', 'UP'].forEach((t, i) => drawLabel(ctx, t, W * 0.22, H * (0.14 + i * 0.19), H * 0.026, '#fff'));
-    FLAP_DETENTS.forEach((d, i) => drawLabel(ctx, d === 0 ? 'UP' : String(d), W * 0.78, H * (0.14 + i * 0.075), H * 0.026, '#fff'));
-    drawLabel(ctx, 'IDLE / CUTOFF', W * 0.5, H * 0.86, H * 0.026, '#fff');
-    drawLabel(ctx, 'PARK BRAKE', W * 0.14, H * 0.93, H * 0.025, '#ff6b5b');
-    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), new THREE.MeshStandardMaterial({ map: canvasTexture(c), roughness: 0.7 }));
-    cs.add(plate);
+    const box = new THREE.Mesh(new RoundedBoxGeometry(0.95, 0.46, 0.06, 3, 0.01), mats.panelDark);
+    box.position.z = -0.034; aft.add(box);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.43), mats.panel); face.position.z = -0.003; aft.add(face);
   }
-  const lever = (partId, x, y, h, knobGeom, knobMat) => {
-    const g = new THREE.Group();
-    g.position.set(x, y, 0);
-    cs.add(g);
-    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, h), mats.black);
-    stem.position.z = h / 2;
-    const knob = new THREE.Mesh(knobGeom, knobMat);
-    knob.position.z = h;
-    [stem, knob].forEach((m) => { m.userData.partId = partId; g.add(m); });
-    return g;
+  zone(aft, 'fd-irs', 0.28, 0.38, -0.31, 0, LAYOUTS['fd-irs']);
+  zone(aft, 'fd-le-devices', 0.25, 0.38, -0.02, 0, LAYOUTS['fd-le-devices']);
+  zone(aft, 'fd-engine-eec', 0.3, 0.18, 0.29, 0.1, LAYOUTS['fd-engine-eec']);
+  zone(aft, 'fd-oxygen', 0.3, 0.19, 0.29, -0.095, LAYOUTS['fd-oxygen']);
+
+  // ---- pedestal: forward electronic panel (P9)
+  const fwdElec = facing(V(0.665, 0.595, 0), V(-0.54, 0.842, 0));
+  {
+    // pedestal body under the sloping P9 face
+    const prof = new THREE.Shape();
+    prof.moveTo(0.45, 0); prof.lineTo(0.98, 0); prof.lineTo(0.98, 0.72); prof.lineTo(0.858, 0.716); prof.lineTo(0.463, 0.462); prof.lineTo(0.45, 0.44); prof.closePath();
+    const geo = new THREE.ExtrudeGeometry(prof, { depth: 0.64, bevelEnabled: false });
+    geo.translate(0, 0, -0.32);
+    const body = new THREE.Mesh(geo, mats.panelDark);
+    body.castShadow = true; body.receiveShadow = true; root.add(body);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.47), mats.panel); face.position.z = -0.001; fwdElec.add(face);
+  }
+  bezel(fwdElec, 0.2, 0.2, 0, 0.12);
+  zone(fwdElec, 'fd-lower-du', 0.2, 0.2, 0, 0.12, D.drawLowerDU, { screen: true, z: 0.002, state: () => { const e = snap().p.eng; return { run1: e.run1, run2: e.run2, air: air() }; } });
+  zone(fwdElec, 'fd-autobrake', 0.17, 0.2, -0.215, 0.12, LAYOUTS['fd-autobrake']);
+  zone(fwdElec, 'fd-lower-du', 0.17, 0.2, 0.215, 0.12, LAYOUTS['fd-mfd']);
+  for (const s of [-1, 1]) {
+    const cdu = zone(fwdElec, 'fd-cdu', 0.15, 0.225, s * 0.165, -0.11, D.drawCDU, { side: s < 0 ? 'L' : 'R', ppm: 3000 });
+    void cdu;
+  }
+
+  // ---- control stand: curved quadrant with levers rotating about a common pivot
+  const PIV = V(0.21, 0.33, 0), R = 0.32;
+  const stand = new THREE.Group(); root.add(stand);
+  {
+    const prof = new THREE.Shape();
+    prof.moveTo(-0.02, 0); prof.lineTo(0.47, 0); prof.lineTo(0.47, 0.5);
+    for (let a = 0.72; a >= -0.72; a -= 0.08) prof.lineTo(PIV.x + Math.sin(a) * (R - 0.016), PIV.y + Math.cos(a) * (R - 0.016));
+    prof.lineTo(-0.02, 0.55); prof.closePath();
+    const geo = new THREE.ExtrudeGeometry(prof, { depth: 0.34, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.01, bevelSegments: 3 });
+    geo.translate(0, 0, -0.17);
+    const body = new THREE.Mesh(geo, mats.panel); body.castShadow = true; body.receiveShadow = true;
+    stand.add(body);
+    // quadrant top: painted cylinder segment
+    const c = makeCanvas(0.46, 0.34, 1600);
+    const ctx = c.getContext('2d');
+    const W = c.width, H = c.height;
+    ctx.fillStyle = '#4a525b'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#0d0f12';
+    const slot = (z, len = 0.84) => ctx.fillRect(W * ((1 - len) / 2), H * (0.5 + z / 0.34) - 5, W * len, 10);
+    slot(-0.035); slot(0.035); slot(-0.13, 0.7); slot(0.13, 0.7);
+    // u axis runs aft->forward along the arc; v across the stand (FO side at the bottom)
+    const at = (deg) => W * (0.5 + deg / 82.5);
+    const lab = (t, deg, z, size = 0.022) => { ctx.save(); ctx.translate(at(deg), H * (0.5 + z / 0.34)); ctx.rotate(Math.PI / 2); drawLabel(ctx, t, 0, 0, H * size * 1.6, '#f4f3ee'); ctx.restore(); };
+    lab('FLAPS', -36, 0.13);
+    [['UP', 28], ['1', 21], ['2', 14], ['5', 7], ['10', 0], ['15', -7], ['25', -14], ['30', -21], ['40', -28]].forEach(([t, d]) => {
+      ctx.fillStyle = '#f4f3ee'; ctx.fillRect(at(d) - 1.5, H * (0.5 + 0.105 / 0.34), 3, H * 0.05);
+      lab(t, d, 0.093, 0.018);
+    });
+    lab('SPEED\nBRAKE', -36, -0.13);
+    [['DOWN', 28], ['ARMED', 22], ['FLT DET', 2], ['UP', -25]].forEach(([t, d]) => lab(t, d, -0.093, 0.016));
+    lab('IDLE', -24, 0.0, 0.016); lab('FWD THRUST', 10, 0.0, 0.016);
+    const qt = canvasTexture(c);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.34, 48, 1, true, -0.72, 1.44), new THREE.MeshStandardMaterial({ map: qt, roughness: 0.6, side: THREE.DoubleSide }));
+    top.rotation.x = -Math.PI / 2; top.position.copy(PIV);
+    top.receiveShadow = true;
+    stand.add(top);
+  }
+  // CylinderGeometry with rotation.x = PI/2 maps theta around z; theta 0 points to -z before rotation...
+  // levers simply use the pivot + angle (deg, + = forward) below.
+  const leverAt = (partId, z, len, knobGeo, knobMat, stemMat = mats.chrome) => {
+    const g = new THREE.Group(); g.position.set(PIV.x, PIV.y, z); root.add(g);
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.012, len, 0.012), stemMat); stem.position.y = len / 2;
+    const knob = new THREE.Mesh(knobGeo, knobMat); knob.position.y = len;
+    [stem, knob].forEach((mm) => { mm.userData.partId = partId; mm.castShadow = true; g.add(mm); });
+    return { g, knob };
   };
-  const thrust = [-0.035, 0.035].map((x) => lever('fd-thrust-levers', x, -0.05, 0.13, new THREE.BoxGeometry(0.05, 0.03, 0.035), mats.metal));
+  const setLever = (lv, deg) => { lv.g.rotation.z = -THREE.MathUtils.degToRad(deg); };
+  const thrust = [-0.035, 0.035].map((z) => leverAt('fd-thrust-levers', z, R + 0.11, new RoundedBoxGeometry(0.035, 0.03, 0.055, 3, 0.008), mats.white, mats.plastic));
   const reverse = thrust.map((t) => {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.012), mats.black);
-    r.position.set(0, 0.03, 0.12); r.userData.partId = 'fd-thrust-levers';
-    t.add(r);
+    const r = new THREE.Group(); r.position.set(0.02, R + 0.075, 0); t.g.add(r);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.05, 0.012), mats.black); arm.position.y = 0.025;
+    arm.userData.partId = 'fd-thrust-levers'; r.add(arm);
     return r;
   });
-  const sbLever = lever('fd-speedbrake-lever', -0.16, 0.1, 0.1, new THREE.BoxGeometry(0.03, 0.05, 0.02), mats.wall);
-  const flapLever = lever('fd-flap-lever', 0.16, 0.1, 0.1, new THREE.BoxGeometry(0.05, 0.03, 0.025), mats.wall);
-  [-0.03, 0.03].forEach((x) => lever('fd-start-levers', x, -0.17, 0.06, new THREE.CylinderGeometry(0.012, 0.012, 0.03, 12), mats.black));
-  lever('fd-start-levers', -0.15, -0.18, 0.05, new THREE.BoxGeometry(0.035, 0.02, 0.015), new THREE.MeshStandardMaterial({ color: '#b8231c' }));
-  // stab trim wheels
-  const wheels = [-1, 1].map((s) => {
-    const g = new THREE.Group();
-    g.position.set(0.15, 0.48, s * 0.232);
-    root.add(g);
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 40), mats.black);
-    w.rotation.x = Math.PI / 2;
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.032), mats.wall);
-    stripe.position.set(0, 0.1, 0);
-    [w, stripe].forEach((m) => { m.userData.partId = 'fd-stab-trim'; g.add(m); });
+  // TO/GA buttons on the thrust lever knobs, A/T disconnect on the outboard sides
+  thrust.forEach((t, i) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.006, 0.02), mats.black); b.position.set(-0.018, R + 0.11, 0); t.g.add(b);
+    const at = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.006, 10), mats.red); at.rotation.x = Math.PI / 2; at.position.set(0, R + 0.11, (i ? 1 : -1) * 0.03); t.g.add(at);
+  });
+  const sbLever = leverAt('fd-speedbrake-lever', -0.13, R + 0.09, new RoundedBoxGeometry(0.06, 0.025, 0.035, 3, 0.008), mats.white);
+  const flapLever = leverAt('fd-flap-lever', 0.13, R + 0.09, new RoundedBoxGeometry(0.03, 0.035, 0.06, 3, 0.008), mats.white);
+  // engine start levers at the aft end, red-tipped release
+  const startLevers = [-0.03, 0.03].map((z) => {
+    const g = new THREE.Group(); g.position.set(0.0, 0.56, z); root.add(g);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.06, 0.012), mats.chrome); arm.position.y = 0.03;
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.03, 14), mats.black); knob.rotation.x = Math.PI / 2; knob.position.y = 0.06;
+    [arm, knob].forEach((mm) => { mm.userData.partId = 'fd-start-levers'; g.add(mm); });
     return g;
   });
-
-  // aft electronic panel (P8)
-  const aftElec = facing(V(-0.3, 0.6, 0), V(-0.06, 1, 0));
-  aftElec.add(new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.54), mats.panel));
-  zone(aftElec, 'fd-fire-panel', 0.42, 0.15, 0, 0.18, L('fd-fire-panel'));
-  zone(aftElec, 'fd-radios', 0.42, 0.21, 0, 0.0, L('fd-radios'));
-  zone(aftElec, 'fd-trim-panel', 0.42, 0.13, 0, -0.19, L('fd-trim-panel'));
-
-  // ---- seats, columns, pedals, tiller
-  for (const s of [-1, 1]) {
-    const z = s * 0.53;
-    box(0.5, 0.12, 0.5, mats.seat, [-0.45, 0.46, z]);
-    const back = box(0.12, 0.8, 0.5, mats.seat, [-0.74, 0.92, z]);
-    back.rotation.z = -0.12;
-    box(0.1, 0.22, 0.3, mats.seat, [-0.82, 1.42, z]);
-    box(0.3, 0.4, 0.3, mats.trim, [-0.45, 0.2, z]);
-  }
-  const columns = [-1, 1].map((s) => {
-    const z = s * 0.53;
-    const pivot = new THREE.Group();
-    pivot.position.set(0.58, 0.06, z);
-    root.add(pivot);
-    const col = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.62, 0.05), mats.black);
-    col.position.set(-0.08, 0.31, 0); col.rotation.z = 0.25;
-    const wheel = new THREE.Group();
-    wheel.position.set(-0.17, 0.66, 0);
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.035, 0.32), mats.black);
-    const gripL = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.13, 0.03), mats.black); gripL.position.set(0, 0.05, -0.16);
-    const gripR = gripL.clone(); gripR.position.z = 0.16;
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 16), mats.metal); hub.rotation.z = Math.PI / 2;
-    [bar, gripL, gripR, hub].forEach((m) => { m.userData.partId = 'fd-control-column'; wheel.add(m); });
-    col.userData.partId = 'fd-control-column';
-    pivot.add(col, wheel);
-    return { pivot, wheel };
-  });
-  const pedals = [];
-  for (const s of [-1, 1]) {
-    for (const p of [-1, 1]) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.2, 0.09), mats.metal);
-      m.position.set(0.74, 0.17, s * 0.53 + p * 0.1);
-      m.rotation.z = 0.35;
-      m.userData.partId = 'fd-rudder-pedals';
-      root.add(m);
-      pedals.push({ m, p, base: m.position.x });
-    }
-  }
+  // parking brake lever (left aft of the stand) and its red light
+  const parkLever = new THREE.Group(); parkLever.position.set(-0.01, 0.53, -0.14); root.add(parkLever);
   {
-    const t = new THREE.Group();
-    t.position.set(0.32, 0.72, -0.99);
-    root.add(t);
-    const disk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.02, 24), mats.black);
-    disk.rotation.x = Math.PI / 2;
-    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.05, 12), mats.metal);
-    knob.rotation.x = Math.PI / 2; knob.position.set(0.04, 0, 0.03);
-    [disk, knob].forEach((m) => { m.userData.partId = 'fd-tiller'; t.add(m); });
-    box(0.3, 0.12, 0.06, mats.trim, [0.32, 0.66, -1.0]);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.012), mats.chrome); arm.position.x = 0.03;
+    const grip = new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.024, 0.03, 3, 0.006), mats.red); grip.position.x = 0.065;
+    [arm, grip].forEach((mm) => { mm.userData.partId = 'fd-parking-brake'; mm.castShadow = true; parkLever.add(mm); });
   }
+  const standAft = facing(V(-0.032, 0.42, 0), V(-1, 0.1, 0));
+  zone(standAft, 'fd-parking-brake', 0.08, 0.05, -0.12, 0.06, LAYOUTS['fd-parking-brake-light']);
+  zone(standAft, 'fd-stab-trim', 0.14, 0.09, 0.08, 0.04, LAYOUTS['fd-stab-cutout']);
+  // stab trim wheels with white stripes, and the trim indicators beside them
+  const wheels = [-1, 1].map((s) => {
+    const g = new THREE.Group();
+    g.position.set(0.2, 0.43, s * 0.195);
+    root.add(g);
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.03, 48), mats.black);
+    w.rotation.x = Math.PI / 2;
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.008, 8, 48), mats.plastic);
+    const stripes = [0, Math.PI].map((a) => { const st = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.07, 0.032), mats.white); st.position.set(Math.sin(a) * 0.1, Math.cos(a) * 0.1, 0); st.rotation.z = -a; return st; });
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.05, 10), mats.metal); handle.rotation.x = Math.PI / 2; handle.position.set(0.11, 0.0, s * 0.035);
+    [w, rim, ...stripes, handle].forEach((mm) => { mm.userData.partId = 'fd-stab-trim'; mm.castShadow = true; g.add(mm); });
+    return g;
+  });
+  const trimInd = [-1, 1].map((s) => facing(V(0.42, 0.42, s * 0.181), V(0, 0, s), stand));
+  trimInd.forEach((g, i) => zone(g, 'fd-stab-trim', 0.05, 0.15, 0, 0, (ctx, W, H, st) => {
+    ctx.fillStyle = '#4a525b'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#0c0d0f'; ctx.fillRect(W * 0.35, H * 0.06, W * 0.3, H * 0.88);
+    ctx.fillStyle = '#2bd46a'; ctx.fillRect(W * 0.35, H * (0.06 + 0.88 * (1 - 8.6 / 17)), W * 0.3, H * 0.88 * (8.6 - 2.9) / 17 * 0.9);
+    for (let u = 0; u <= 16; u += 2) { const y = H * (0.06 + 0.88 * (1 - u / 17)); ctx.fillStyle = '#fff'; ctx.fillRect(W * 0.2, y - 1, W * 0.14, 2); drawLabel(ctx, String(u), W * 0.12, y, H * 0.035, '#fff'); }
+    const y = H * (0.06 + 0.88 * (1 - st.stab / 17));
+    ctx.fillStyle = '#f4f3ee'; ctx.beginPath(); ctx.moveTo(W * 0.92, y - H * 0.025); ctx.lineTo(W * 0.66, y); ctx.lineTo(W * 0.92, y + H * 0.025); ctx.fill();
+    drawLabel(ctx, 'NOSE\nDN', W * 0.75, H * 0.04, H * 0.025, '#fff'); drawLabel(ctx, 'NOSE\nUP', W * 0.75, H * 0.97, H * 0.025, '#fff');
+  }, { side: i ? 'R' : 'L', state: () => ({ stab: Math.round((parseFloat(systems.readout('stabUnits')) || 5) * 4) / 4 }) }));
+
+  // ---- aft electronic panel (P8)
+  const aftElec = facing(V(-0.29, 0.6, 0), V(-0.06, 1, 0));
+  {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.58, 0.38), mats.panelDark);
+    body.position.set(-0.3, 0.29, 0); body.castShadow = true; body.receiveShadow = true; root.add(body);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.37, 0.59), mats.panel); face.position.z = -0.001; aftElec.add(face);
+  }
+  const fireZone = zone(aftElec, 'fd-fire-panel', 0.35, 0.13, 0, 0.215, FIRE_PANEL);
+  zone(aftElec, 'fd-radios', 0.17, 0.085, -0.088, 0.1, LAYOUTS['fd-radio-comm1']);
+  zone(aftElec, 'fd-radios', 0.17, 0.085, 0.088, 0.1, LAYOUTS['fd-radio-comm2']);
+  zone(aftElec, 'fd-radios', 0.17, 0.08, -0.088, 0.013, LAYOUTS['fd-radio-nav1']);
+  zone(aftElec, 'fd-radios', 0.17, 0.08, 0.088, 0.013, LAYOUTS['fd-radio-nav2']);
+  zone(aftElec, 'fd-radios', 0.17, 0.09, -0.088, -0.075, LAYOUTS['fd-acp'], { side: 'L' });
+  zone(aftElec, 'fd-radios', 0.17, 0.09, 0.088, -0.075, LAYOUTS['fd-acp'], { side: 'R' });
+  zone(aftElec, 'fd-cargo-fire', 0.17, 0.08, -0.088, -0.165, LAYOUTS['fd-cargo-fire']);
+  zone(aftElec, 'fd-radios', 0.17, 0.08, 0.088, -0.165, LAYOUTS['fd-atc']);
+  zone(aftElec, 'fd-trim-panel', 0.2, 0.07, -0.075, -0.25, LAYOUTS['fd-trim-panel']);
+  zone(aftElec, 'fd-flight-deck-door', 0.14, 0.07, 0.105, -0.25, LAYOUTS['fd-door-lock']);
+  void fireZone;
+
+  // engine and APU fire switches (T-handles) that pull and rotate
+  const FIRE_KEYS = ['eng1', 'apu', 'eng2'];
+  const fireHandles = FIRE_KEYS.map((k, i) => {
+    const g = new THREE.Group();
+    g.position.set((FIRE_HANDLE_X[i] - 0.5) * 0.35, 0.215, 0.006);
+    aftElec.add(g);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.022, 0.022), mats.plastic);
+    grip.position.z = 0.012; grip.castShadow = true;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.02, 10), mats.chrome); stem.rotation.x = Math.PI / 2; stem.position.z = 0.0;
+    // translucent lens on the grip with the engine number; glows red with a fire warning
+    const c = makeCanvas(0.05, 0.018, 4000);
+    const cx = c.getContext('2d');
+    cx.fillStyle = '#3a0c08'; cx.fillRect(0, 0, c.width, c.height);
+    drawLabel(cx, ['1', 'APU', '2'][i], c.width / 2, c.height / 2, c.height * 0.7, '#ffd7cf');
+    const lensMat = new THREE.MeshStandardMaterial({ map: canvasTexture(c), roughness: 0.25, emissive: new THREE.Color('#ff2a1c'), emissiveMap: canvasTexture(c), emissiveIntensity: 0 });
+    const lens = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.018), lensMat);
+    lens.position.z = 0.0232; lens.raycast = () => {};
+    grip.userData.partId = 'fd-fire-panel'; stem.userData.partId = 'fd-fire-panel';
+    g.add(grip, stem, lens);
+    const key = `fire.handle.${k}`;
+    grip.userData.hint = () => {
+      const v = getS(key) ?? 'IN';
+      const nmH = ['Engine 1 fire switch', 'APU fire switch', 'Engine 2 fire switch'][i];
+      if (v === 'IN') return `${nmH} · IN · click to pull`;
+      if (k === 'apu') return v === 'PULLED' ? `${nmH} · PULLED · click to rotate (discharge) · Shift+click to push in` : `${nmH} · ROTATED · click to return · Shift+click to push in`;
+      return v === 'PULLED' ? `${nmH} · PULLED · click left half: rotate L, right half: rotate R · Shift+click to push in` : `${nmH} · rotated ${v} · click to return · Shift+click to push in`;
+    };
+    grip.userData.interact = ({ uv, shift }) => {
+      const v = getS(key) ?? 'IN';
+      let next;
+      if (shift && v !== 'IN') next = 'IN';
+      else if (v === 'IN') next = 'PULLED';
+      else if (v === 'PULLED') next = k === 'apu' ? 'DISCH' : (uv && uv.x < 0.5 ? 'L' : 'R');
+      else next = 'PULLED';
+      const r = trySet(key, next);
+      S = null;
+      return { handled: true, ok: r.ok !== false, message: r.message };
+    };
+    return { g, lensMat, key, k, cur: { z: 0, rot: 0 } };
+  });
+
+  // ---- seats, columns, pedals, consoles, tiller, CB panels, door
+  buildSeat(root, mats, -0.53, 'fd-seats');
+  buildSeat(root, mats, 0.53, 'fd-seats');
+  const columns = [-1, 1].map((s) => buildColumn(root, mats, s * 0.53, 'fd-control-column'));
+  const pedals = [-1, 1].flatMap((s) => buildPedals(root, mats, s * 0.53, 'fd-rudder-pedals'));
+  const maskTex = (() => {
+    const c = makeCanvas(0.19, 0.14, 1600); const ctx = c.getContext('2d'); const W = c.width, H = c.height;
+    ctx.fillStyle = '#30353b'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#20242a'; rrect(ctx, W * 0.06, H * 0.08, W * 0.88, H * 0.84, 10); ctx.fill();
+    drawLabel(ctx, 'OXYGEN MASK', W / 2, H * 0.22, H * 0.09, '#f4f3ee');
+    drawLabel(ctx, 'SQUEEZE RED LEVERS\nAND PULL TO REMOVE', W / 2, H * 0.48, H * 0.065, '#f4f3ee');
+    ctx.fillStyle = '#e8e2c8'; ctx.fillRect(W * 0.15, H * 0.68, W * 0.25, H * 0.12); drawLabel(ctx, 'OXY ON', W * 0.275, H * 0.74, H * 0.06, '#222');
+    drawLabel(ctx, 'RESET / TEST', W * 0.68, H * 0.74, H * 0.06, '#f4f3ee');
+    return canvasTexture(c);
+  })();
+  buildConsoles(root, mats, maskTex);
+  buildTiller(root, mats, 'fd-tiller', -1);
+  buildCBPanel(root, mats, { x0: -1.2, x1: -0.62, y0: 0.42, y1: 1.5, side: -1, seed: 1, partId: 'fd-circuit-breakers' });
+  buildCBPanel(root, mats, { x0: -1.22, x1: -0.58, y0: 0.38, y1: 1.56, side: 1, seed: 5, partId: 'fd-circuit-breakers' });
+  buildDoor(root, mats, 'fd-flight-deck-door');
+
+  kit.finalize(root);
+  // the studio environment map isn't occluded by the shell: tone it down indoors so the
+  // windows and flood lights carry the lighting (screens and the outside world are unaffected)
+  root.traverse((o) => {
+    if (!o.isMesh && !o.isInstancedMesh) return;
+    for (const m of [].concat(o.material)) if (m && m.isMeshStandardMaterial && m.envMapIntensity === 1 && m.emissiveIntensity <= 1) m.envMapIntensity = 0.45;
+  });
 
   // ---- direct manipulation of levers and wheels
   const operable = (obj, hint, act) => obj.traverse((m) => {
-    if (!m.isMesh) return;
-    m.userData.hint = () => hint;
+    if (!m.isMesh || !m.userData.partId) return;
+    m.userData.hint = typeof hint === 'function' ? hint : () => hint;
     m.userData.interact = ({ shift }) => {
       const r = act(shift);
+      S = null;
       return { handled: true, ok: r?.ok !== false, message: r?.message };
     };
   });
-  operable(flapLever, 'Flap lever · click: next detent · Shift+click: back one', (shift) => {
+  operable(flapLever.g, () => `Flap lever · ${getS('flapLever') || 'UP'} · click: next detent · Shift+click: back one`, (shift) => {
     const i = FLAP_DETENTS.indexOf(systems.get('flapLever'));
     const n = FLAP_DETENTS[Math.max(0, Math.min(FLAP_DETENTS.length - 1, i + (shift ? -1 : 1)))];
     return systems.set('flapLever', n);
   });
-  operable(gearLever, 'Gear lever · click: UP / DN · Shift+click: OFF', (shift) => {
+  operable(gearLever, () => `Gear lever · ${getS('gearLever')} · click: UP / DN · Shift+click: OFF`, (shift) => {
     if (shift) return systems.set('gearLever', 'OFF');
     return systems.set('gearLever', systems.get('gearLever') === 'DN' ? 'UP' : 'DN');
   });
   const SB = ['DOWN', 'ARMED', 'FLIGHT', 'UP'];
-  operable(sbLever, 'Speed brake · click: next position · Shift+click: back', (shift) => {
+  operable(sbLever.g, () => `Speed brake · ${getS('speedbrake')} · click: next position · Shift+click: back`, (shift) => {
     const i = SB.indexOf(systems.get('speedbrake'));
     return systems.set('speedbrake', SB[Math.max(0, Math.min(SB.length - 1, i + (shift ? -1 : 1)))]);
   });
-  thrust.forEach((t) => operable(t, 'Reverse thrust levers · click to raise / stow', () => systems.set('reversers', !systems.get('reversers'))));
+  thrust.forEach((t) => operable(t.g, 'Reverse thrust levers · click to raise / stow', () => systems.set('reversers', !systems.get('reversers'))));
   wheels.forEach((w) => operable(w, 'Stab trim wheel · click: nose up · Shift+click: nose down', (shift) =>
     systems.set('stabTrim', Math.round(((parseFloat(systems.readout('stabUnits')) || 5) + (shift ? -0.5 : 0.5)) * 4) / 4)));
+  operable(parkLever, () => `Parking brake lever · ${getS('sw.parkbrake') ? 'SET' : 'RELEASED'} · click to ${getS('sw.parkbrake') ? 'release' : 'set'}`, () => trySet('sw.parkbrake', !getS('sw.parkbrake')));
 
   // ---- day / night
-  const sky = root.children.find((c) => c.geometry?.type === 'SphereGeometry');
   function setNight(on) {
-    sky.material.color.set(on ? '#1a2233' : '#ffffff');
-    amb.intensity = on ? 0.12 : 0.9;
-    dome.intensity = on ? 0.35 : 1.2;
-    dome.color.set(on ? '#ffd9a8' : '#fff3e0');
-    for (const m of nightables) {
+    night = on;
+    outside.setNight(on);
+    hemi.intensity = on ? 0.04 : 0.4;
+    dome.intensity = on ? 0.05 : 0.6;
+    dome.color.set(on ? '#ffd9a8' : '#fff1dc');
+    floods[0].intensity = floods[1].intensity = on ? 1.1 : 0;
+    floods[2].intensity = on ? 0.9 : 0;
+    floods[3].intensity = on ? 0.8 : 0;
+    for (const z of zones) {
+      const m = z.mesh;
+      if (m.material.emissiveIntensity > 1) continue; // screens keep their brightness
       const base = m.userData.baseEmissive || (m.userData.baseEmissive = m.material.emissive.clone());
-      base.set(on ? '#8a8a8a' : '#2a2a2a');
+      base.set(on ? '#060606' : '#161616');
       if (!m.userData.hl) m.material.emissive.copy(base);
     }
+    S = null;
+    zones.forEach((z) => z.refresh(true));
   }
+  // repaint once the web fonts have loaded (canvas text falls back until then)
+  document.fonts?.ready?.then(() => { S = null; zones.forEach((z) => z.refresh(true)); });
 
   // ---- animation from systems
-  const cur = { flap: 0, sb: 0.12, gear: -0.04, rev: 0, stab: 5, roll: 0, pitch: 0, yaw: 0 };
+  const cur = { flap: 28, sb: 28, gear: -0.05, rev: 0, roll: 0, pitch: 0, yaw: 0, thr: -22 };
   const approach = (a, b, k) => a + (b - a) * k;
+  const GEAR_Y = { UP: 0.0, OFF: -0.047, DN: -0.094 };
+  let lastAir = null;
   function update(dt) {
     fd.t += dt;
+    S = null;
     const st = systems.state;
     const k = 1 - Math.exp(-dt * 8);
     const fi = Math.max(0, FLAP_DETENTS.indexOf(st.flapLever));
-    cur.flap = approach(cur.flap, 0.13 - (fi / (FLAP_DETENTS.length - 1)) * 0.26, k);
-    flapLever.position.y = cur.flap;
-    const sbPos = { DOWN: 0.12, ARMED: 0.08, FLIGHT: -0.02, UP: -0.12 }[st.speedbrake] ?? 0.12;
-    cur.sb = approach(cur.sb, sbPos, k);
-    sbLever.position.y = cur.sb;
-    const gy = { UP: 0.055, OFF: 0.0, DN: -0.055 }[st.gearLever] ?? -0.055;
-    cur.gear = approach(cur.gear, gy, k);
+    cur.flap = approach(cur.flap, 28 - fi * 7, k);
+    setLever(flapLever, cur.flap);
+    const sbDeg = { DOWN: 28, ARMED: 22, FLIGHT: 2, UP: -25 }[st.speedbrake] ?? 28;
+    cur.sb = approach(cur.sb, sbDeg, k);
+    setLever(sbLever, cur.sb);
+    const thr = !st.engines ? -24 : st.onGround ? -22 : 6;
+    cur.thr = approach(cur.thr, thr, k);
+    thrust.forEach((t) => setLever(t, cur.thr));
+    cur.gear = approach(cur.gear, GEAR_Y[st.gearLever] ?? GEAR_Y.DN, k);
     gearLever.position.y = cur.gear;
+    gearLever.position.z = 0.01 + (st.gearLever === 'OFF' ? 0.012 : 0);
     cur.rev = approach(cur.rev, st.reversers ? 1 : 0, k);
-    reverse.forEach((r) => { r.rotation.x = -cur.rev * 1.1; r.position.z = 0.12 + cur.rev * 0.02; });
+    reverse.forEach((r) => { r.rotation.z = cur.rev * 1.2; });
+    const run = snap().p.eng;
+    startLevers.forEach((g, i) => { g.rotation.z = (i ? run.run2 : run.run1) || st.engines ? 0.5 : -0.5; });
+    parkLever.rotation.z = getS('sw.parkbrake') ? 0.6 : 0;
     const stab = parseFloat(systems.readout('stabUnits')) || 5;
     wheels.forEach((w) => { w.rotation.z = stab * 0.9; });
     cur.roll = approach(cur.roll, st.roll, k);
     cur.pitch = approach(cur.pitch, st.pitch, k);
     cur.yaw = approach(cur.yaw, st.yaw, k);
-    columns.forEach((c) => { c.wheel.rotation.x = cur.roll * 1.2; c.pivot.rotation.z = cur.pitch * 0.18; });
-    pedals.forEach((p) => { p.m.position.x = p.base + p.p * cur.yaw * 0.05; });
-    dynamic.forEach((f) => f());
+    columns.forEach((c) => { c.wheel.rotation.x = cur.roll * 1.2; c.pivot.rotation.z = cur.pitch * 0.15; });
+    pedals.forEach((p) => { p.g.position.x = p.p * cur.yaw * 0.05; });
+    // fire handles: pull / rotate and light up
+    const fire = snap().p.fire || {};
+    for (const h of fireHandles) {
+      const v = getS(h.key) ?? 'IN';
+      const z = v === 'IN' ? 0 : 0.03;
+      const rot = v === 'L' || v === 'DISCH' ? 0.6 : v === 'R' ? -0.6 : 0;
+      h.cur.z = approach(h.cur.z, z, k); h.cur.rot = approach(h.cur.rot, rot, k);
+      h.g.position.z = 0.006 + h.cur.z; h.g.rotation.z = h.cur.rot;
+      h.lensMat.emissiveIntensity = fire[h.k] ? 2.4 : 0;
+    }
+    // MCP knobs turn with their values
+    for (const { k: kn, slot } of mcpKnobs) {
+      const w = winById[kn.id]; const v = fd.mcp[w.key] || 0;
+      slot.set(0, -(v / (STEP[w.key] || 1)) * 0.26);
+    }
+    const isAir = !st.onGround;
+    if (isAir !== lastAir) { lastAir = isAir; outside.setAirborne(isAir); }
+    zones.forEach((z) => z.refresh(false));
   }
 
   /** Treat the current cautions as acknowledged (used just before a failure is injected). */
@@ -884,3 +1122,21 @@ export function buildFlightDeck(systems) {
 
   return { root, update, setNight, ackCautions };
 }
+
+// Camera presets, limits and focus behaviour for the flight deck scene.
+export const flightDeckCamera = {
+  home: { position: [-0.08, 1.24, -0.53], target: [0.88, 0.9, -0.42] },
+  views: {
+    Captain: { position: [-0.08, 1.24, -0.53], target: [0.88, 0.9, -0.42] },
+    'First Officer': { position: [-0.08, 1.24, 0.53], target: [0.88, 0.9, 0.42] },
+    Overhead: { position: [-0.32, 1.18, 0], target: [0.33, 1.84, 0] },
+    Glareshield: { position: [0.05, 1.22, 0], target: [0.64, 1.03, 0] },
+    Pedestal: { position: [-0.42, 1.42, 0], target: [0.4, 0.6, 0] },
+    'Aft pedestal': { position: [-0.55, 1.2, 0.05], target: [-0.25, 0.6, 0] },
+    Jumpseat: { position: [-1.0, 1.45, 0.3], target: [0.6, 1.0, 0] },
+  },
+  env: { ground: false, fog: false },
+  limits: { minDistance: 0.1, maxDistance: 2.2, near: 0.02, fov: 62 },
+  bounds: { min: [-1.2, 0.3, -0.85], max: [0.8, 1.88, 0.85] },
+  focus: { scale: 1.5, add: 0.2, min: 0.26, max: 1.2 },
+};

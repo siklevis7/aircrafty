@@ -57,27 +57,36 @@ export const fdParts = [
     id: 'fd-cabin-signs', category: 'fd-overhead', name: 'Cabin Signs & Emergency Lights', where: 'Forward overhead · center',
     what: 'Passenger signs, emergency exit lights, crew call and equipment cooling.',
     how: 'EMERGENCY EXIT LIGHTS (guarded): OFF, ARMED, ON. NO SMOKING / CHIME and FASTEN BELTS switches (OFF, AUTO, ON). ATTEND and GRD CALL buttons. EQUIP COOLING SUPPLY and EXHAUST fans (NORMAL or ALTN).',
-    notes: ['Emergency exit lights are ARMED for flight. The amber NOT ARMED light shows otherwise.'],
+    notes: [
+      'Emergency exit lights are ARMED for flight. The amber NOT ARMED light shows otherwise.',
+      'Live in 3D: click the upper or lower half of the guarded EMER EXIT LIGHTS switch to move it. Out of ARMED, the guard opens and NOT ARMED lights. In ARMED, the lights come on by themselves if DC bus 1 power is lost (simplified here).',
+    ],
     view: [-0.3, -1, 0],
   },
   {
     id: 'fd-window-probe-heat', category: 'fd-overhead', name: 'Window & Probe Heat', where: 'Forward overhead · center',
     what: 'Heats the flight deck windows and the air data probes.',
     how: 'WINDOW HEAT switches for the left and right side and forward windows, with ON and OVERHEAT lights and a test switch. PROBE HEAT A and B heat the pitot probes, AOA vanes and TAT probe. Amber lights show a heater fault.',
-    notes: ['Probe heat is normally ON before takeoff.', 'Window heat goes ON at least 10 minutes before takeoff.'],
+    notes: [
+      'Probe heat is normally ON before takeoff.', 'Window heat goes ON at least 10 minutes before takeoff.',
+      'Live in 3D: the green ON lights follow the WINDOW HEAT switches. With PROBE HEAT A and B off, the amber probe lights (CAPT PITOT, L ELEV PITOT, L ALPHA VANE, TEMP PROBE, F/O PITOT, R ELEV PITOT, R ALPHA VANE, AUX PITOT) are lit. Switch them on and the lights go out.',
+    ],
     view: [-0.3, -1, 0],
   },
   {
     id: 'fd-anti-ice', category: 'fd-overhead', name: 'Anti-Ice Panel', where: 'Forward overhead · third column',
     what: 'Wing and engine anti-ice.',
     how: 'WING ANTI-ICE switch opens the valves sending bleed air to the three inboard slats on each wing. ENG ANTI-ICE switches heat each engine cowl inlet. Blue VALVE OPEN lights confirm the valves are open. Amber COWL ANTI-ICE lights show overpressure.',
-    notes: ['Engine anti-ice must be ON in icing conditions on the ground and in flight.', 'Wing anti-ice on the ground is limited and should be used per your operator\'s procedures.'],
+    notes: [
+      'Engine anti-ice must be ON in icing conditions on the ground and in flight.', 'Wing anti-ice on the ground is limited and should be used per your operator\'s procedures.',
+      'Live in 3D: with an engine running, its ENG anti-ice switch opens the cowl valve and the blue COWL VALVE OPEN light comes on (bright while the valve moves).',
+    ],
     view: [-0.3, -1, -0.05],
   },
   {
     id: 'fd-hydraulics', category: 'fd-overhead', name: 'Hydraulic Pumps', where: 'Forward overhead · third column',
     what: 'The four main hydraulic pumps.',
-    how: 'From left to right: ELEC 2 (system A electric pump), ENG 1 (system A engine-driven pump), ENG 2 (system B engine-driven pump), ELEC 1 (system B electric pump). Amber LOW PRESSURE and OVERHEAT lights.',
+    how: 'System A pumps on the left (ENG 1 engine-driven, ELEC 2 electric), system B on the right (ELEC 1 electric, ENG 2 engine-driven). Each pump has an amber LOW PRESSURE light, and the electric pumps also have OVERHEAT lights.',
     notes: [
       'The electric pumps are crossed: generator 2 powers system A\'s electric pump and generator 1 powers system B\'s.',
       'The engine-driven pumps are normally left ON.',
@@ -102,8 +111,11 @@ export const fdParts = [
   {
     id: 'fd-pressurization', category: 'fd-overhead', name: 'Pressurization Panel', where: 'Forward overhead · lower right',
     what: 'Sets how the cabin is pressurized.',
-    how: 'FLT ALT and LAND ALT selectors feed the pressure controller. The mode selector chooses AUTO, ALTN or MAN. In MAN, a toggle drives the outflow valve open or closed, and a gauge shows the valve position. Cabin altitude and differential pressure indicators sit nearby.',
-    notes: ['Set FLT ALT to the planned cruise level and LAND ALT to the destination field elevation before departure.'],
+    how: 'FLT ALT and LAND ALT selectors feed the pressure controller. The mode selector chooses AUTO, ALTN or MAN. In MAN, a spring-loaded switch drives the outflow valve toward CLOSE or OPEN, and a gauge shows the valve position. Lights: AUTO FAIL and OFF SCHED DESCENT (amber), ALTN and MANUAL (green). A FLT/GRD switch sits alongside.',
+    notes: [
+      'Set FLT ALT to the planned cruise level and LAND ALT to the destination field elevation before departure.',
+      'Live in 3D: click or scroll the FLT ALT and LAND ALT windows to set them, turn the mode selector, and in MAN click the upper or lower half of the outflow valve switch. The valve gauge and the cabin gauges above follow the pressurization model.',
+    ],
     view: [-0.3, -1, -0.15],
   },
   {
@@ -197,8 +209,8 @@ export const fdParts = [
   {
     id: 'fd-lower-du', category: 'fd-pedestal', name: 'Lower Display Unit', where: 'Forward electronic panel (P9), between the CDUs',
     what: 'Shows secondary engine indications (N2, fuel flow, oil, vibration) or system pages such as hydraulics.',
-    how: 'Pages are selected with the display select panel buttons (for example ENG and SYS). It can take over another display unit if one fails.',
-    notes: [],
+    how: 'Pages are selected with the MFD buttons beside it (ENG, SYS, C/R). The FUEL FLOW switch (RESET, RATE, USED) chooses whether fuel flow or fuel used is shown. The display can take over another unit if one fails.',
+    notes: ['Live in 3D: the secondary engine page shows N2, fuel flow and oil indications for running engines.'],
     view: [-0.6, 0.9, 0],
   },
   {
@@ -210,8 +222,8 @@ export const fdParts = [
   },
   {
     id: 'fd-gear-panel', category: 'fd-main', name: 'Landing Gear Lever & Indicators', where: 'Center panel (P2), right side',
-    what: 'Gear lever (UP, OFF, DN), the three green and red gear lights, the flap position indicator, LE FLAPS lights and the autobrake selector.',
-    how: 'These controls are linked to the 3D aircraft. Moving the lever here retracts or extends the gear, with the same ground lock logic. The autobrake selector is set to RTO for takeoff and 1, 2, 3 or MAX for landing.',
+    what: 'Gear lever (UP, OFF, DN) with its wheel-shaped knob, the green and red gear position lights, and the lock override.',
+    how: 'These controls are linked to the 3D aircraft. Moving the lever here retracts or extends the gear, with the same ground lock logic.',
     notes: ['Red light: gear in transit or disagreeing with the lever. Green: down and locked.', 'The gear lever lock prevents UP on the ground, and an override trigger releases it.'],
     tryIt: [{ label: 'Gear UP (in flight)', set: { onGround: false, gearLever: 'UP' } }, { label: 'Gear OFF', set: { gearLever: 'OFF' } }, { label: 'Gear DN', set: { gearLever: 'DN' } }],
     view: [-1, 0.1, -0.1],
@@ -267,8 +279,11 @@ export const fdParts = [
   {
     id: 'fd-fire-panel', category: 'fd-pedestal', name: 'Fire Protection Panel', where: 'Aft electronic panel (P8)',
     what: 'Engine and APU fire switches, the detection test, and cargo fire controls.',
-    how: 'Each engine and APU fire switch is locked until a fire warning, or is mechanically overridden. Pulling it arms the extinguisher and closes the fuel, bleed and hydraulic shutoff valves and trips the generator. Rotating it fires a bottle. Loop selectors and TEST switches cover the fire and overheat detection loops.',
-    notes: ['The engine fire switch is a memory item in many QRHs. Follow your QRH.'],
+    how: 'Each engine and APU fire switch is locked until a fire warning, or is mechanically overridden. Pulling it arms the extinguisher and closes the fuel, bleed and hydraulic shutoff valves and trips the generator. Rotating it fires a bottle (left or right for the engines) and the BOTTLE DISCHARGE light comes on. OVHT DET selectors choose the detection loops, the TEST switch checks the fault and fire circuits, and BELL CUTOUT silences the fire bell.',
+    notes: [
+      'The engine fire switch is a memory item in many QRHs. Follow your QRH.',
+      'Live in 3D: click a fire switch to pull it (the override is modelled with a message), click its left or right half to rotate it, Shift+click to push it back in. The handle lights red with a fire warning. Hold a TEST to see the lights.',
+    ],
     view: [-0.2, 1, 0],
   },
   {
@@ -309,5 +324,105 @@ export const fdParts = [
     how: 'Hydraulic system A (alternate system B with the NOSE WHEEL STEERING switch). The tiller overrides rudder pedal steering.',
     notes: [],
     view: [0, 0.4, 1],
+  },
+
+  // ---------------------------------------------------------------- Added zones
+  {
+    id: 'fd-doors', category: 'fd-overhead', name: 'Door Annunciators', where: 'Forward overhead · fourth column, lower',
+    what: 'Amber lights for the entry, service, cargo, equipment and overwing exit doors.',
+    how: 'A light comes on when its door is not closed and locked. Any door light also lights DOORS on the system annunciator panel.',
+    notes: ['Live in 3D: open the doors from the Exterior controls and the entry and cargo door lights come on.'],
+    view: [-0.3, -1, -0.05],
+  },
+  {
+    id: 'fd-cabin-altitude', category: 'fd-overhead', name: 'Cabin Altitude Panel', where: 'Forward overhead · right column, above the pressurization panel',
+    what: 'Cabin altimeter with differential pressure, cabin rate of climb indicator and the ALT HORN CUTOUT button.',
+    how: 'The outer scale shows cabin altitude and the inner needle shows the pressure difference between cabin and outside air. The rate indicator shows how fast the cabin is climbing or descending. ALT HORN CUTOUT silences the intermittent cabin altitude warning horn.',
+    notes: ['Live in 3D: the needles follow the pressurization model. Try a pressurization failure in Failures mode.'],
+    view: [-0.3, -1, -0.15],
+  },
+  {
+    id: 'fd-oxygen', category: 'fd-aft-overhead', name: 'Oxygen Panel', where: 'Aft overhead',
+    what: 'Crew oxygen cylinder pressure, the guarded PASS OXY switch and the PASS OXY ON light.',
+    how: 'The passenger masks drop automatically at high cabin altitude (about 14,000 ft) or when the PASS OXY switch is moved to ON. PASS OXY ON shows the passenger system has been activated.',
+    notes: ['Live in 3D: click the guarded PASS OXY switch to deploy the passenger masks. The gauge reads the crew cylinder pressure from the oxygen model.'],
+    view: [0.4, -1, 0.1],
+  },
+  {
+    id: 'fd-autobrake', category: 'fd-pedestal', name: 'Autobrake & Antiskid', where: 'Forward electronic panel (P9), left of the lower display',
+    what: 'The AUTO BRAKE select switch, AUTO BRAKE DISARM and ANTISKID INOP lights, and the brake pressure indicator.',
+    how: 'RTO is selected for takeoff and 1, 2, 3 or MAX for landing. The disarm light shows a fault or a disarm (for example manual braking or advancing the thrust levers). The brake pressure indicator shows the brake accumulator pressure.',
+    notes: ['Live in 3D: click or scroll the selector. The lights and gauge follow the gear and brakes model.', 'Follow your operator\'s procedures for autobrake use.'],
+    view: [-0.6, 0.9, -0.1],
+  },
+  {
+    id: 'fd-parking-brake', category: 'fd-pedestal', name: 'Parking Brake', where: 'Control stand · left, with the red PARKING BRAKE light',
+    what: 'The parking brake lever and its red PARKING BRAKE light.',
+    how: 'With the brake pedals depressed, pulling the lever up latches the brakes on. The red light shows the parking brake is set. Pressing the pedals releases it.',
+    notes: ['Live in 3D: click the red-tipped lever to set or release the parking brake.'],
+    view: [-0.8, 0.6, -0.2],
+  },
+  {
+    id: 'fd-cargo-fire', category: 'fd-pedestal', name: 'Cargo Fire Panel', where: 'Aft electronic panel (P8)',
+    what: 'Fire detection and extinguishing for the forward and aft cargo compartments.',
+    how: 'FWD and AFT switches light red with a fire warning and arm the extinguishing system for that compartment (ARMED). DISCH fires the single cargo bottle into the armed compartment, and the DISCH light shows it has discharged. DETECTOR SELECT and TEST cover the smoke detection loops.',
+    notes: ['Live in 3D: arm a compartment, then press DISCH. Follow your QRH for cargo fire procedures.'],
+    view: [-0.2, 1, 0.1],
+  },
+  {
+    id: 'fd-flap-gauge', category: 'fd-main', name: 'Flap Position Indicator & LE Lights', where: 'Center panel (P2), below the standby display',
+    what: 'The trailing-edge flap position indicator with left and right needles, and the LE FLAPS TRANSIT and LE FLAPS EXT lights.',
+    how: 'The two needles show left and right flap position, so a split shows asymmetry. LE FLAPS TRANSIT (amber) shows leading-edge devices moving or disagreeing. LE FLAPS EXT (green) shows them extended.',
+    notes: ['Live in 3D: move the flap lever and watch the needles and lights.'],
+    view: [-1, 0.1, 0.05],
+  },
+  {
+    id: 'fd-main-warnings', category: 'fd-main', name: 'Warning & Status Lights', where: 'Captain and F/O panels, above the displays and outboard',
+    what: 'TAKEOFF CONFIG and CABIN ALTITUDE (red), autopilot / autothrottle disengage (A/P, A/T) and FMC alert lights, and the speed brake and stabilizer trim lights.',
+    how: 'CABIN ALTITUDE comes on with the cabin above about 10,000 ft. SPEED BRAKE ARMED (green) shows the auto speed brake is armed. SPEEDBRAKE EXTENDED and STAB OUT OF TRIM are amber cautions. BELOW G/S can be pressed to inhibit the alert.',
+    notes: ['Live in 3D: arm the speed brake or lose cabin pressure in Failures mode to see these lights.'],
+    view: [-1, 0.15, 0.2],
+  },
+  {
+    id: 'fd-clock', category: 'fd-main', name: 'Clocks', where: 'Captain and F/O panels, outboard',
+    what: 'Each pilot has a clock with time and date, a chronograph and an elapsed time function.',
+    how: 'Time can come from GPS or be set manually. The chronograph is often started from the glareshield clock switch.',
+    notes: [],
+    view: [-1, 0.1, 0.1],
+  },
+  {
+    id: 'fd-display-select', category: 'fd-main', name: 'Display Select Panel', where: 'Captain and F/O panels, outboard',
+    what: 'The MAIN PANEL DUs and LOWER DU selectors.',
+    how: 'They reconfigure the display units after a failure: for example moving the PFD to the inboard display or showing the primary engine indications there. NORM is the usual position.',
+    notes: [],
+    view: [-1, 0.1, 0.1],
+  },
+  {
+    id: 'fd-seats', category: 'fd-cabin', name: 'Pilot Seats', where: 'Captain and F/O',
+    what: 'Adjustable crew seats with armrests, headrest and a five-point harness. Many operators fit sheepskin covers.',
+    how: 'Fore and aft, height, recline and lumbar adjustments let each pilot reach the design eye position, aligning the eye reference so the glareshield and the instruments are seen as intended. The harness has an inertia reel lock.',
+    notes: [],
+    view: [-0.8, 0.5, 0.3],
+  },
+  {
+    id: 'fd-oxygen-mask', category: 'fd-cabin', name: 'Crew Oxygen Masks', where: 'Stowage boxes on the side consoles, beside each pilot',
+    what: 'Quick-donning oxygen masks, stowed in a box within reach of each pilot.',
+    how: 'Squeezing the red levers pulls the mask out and inflates the harness so it can go on with one hand. The regulator selects normal (diluted) or 100% oxygen, and an emergency setting gives positive pressure. A flow indicator shows oxygen is flowing. RESET/TEST checks the mask.',
+    notes: [],
+    view: [-0.4, 0.8, -0.6],
+  },
+  {
+    id: 'fd-circuit-breakers', category: 'fd-cabin', name: 'Circuit Breaker Panels', where: 'Sidewalls behind the pilots (P18 captain side, P6 F/O side)',
+    what: 'Rows of circuit breakers protecting the aircraft\'s electrical loads, grouped by system.',
+    how: 'A breaker pops out (showing its white collar) when it trips. Resetting tripped breakers in flight follows strict operator rules.',
+    notes: ['The groups shown here are generic, not a map of a real panel.', 'Follow your operator\'s policy on circuit breaker resets.'],
+    view: [0.6, 0.3, -0.8],
+  },
+  {
+    id: 'fd-flight-deck-door', category: 'fd-cabin', name: 'Flight Deck Door', where: 'Aft bulkhead · lock selector on the aft electronic panel',
+    what: 'The reinforced, lockable flight deck door with a viewer, deadbolt and decompression panel.',
+    how: 'The FLT DECK DOOR selector (UNLKD, AUTO, DENY) works with the cabin keypad: in AUTO, an emergency access request unlocks the door after a delay unless the crew denies it. LOCK FAIL and AUTO UNLK lights show the lock status. The decompression panels open if the flight deck suddenly loses pressure.',
+    notes: ['Follow your operator\'s security procedures.'],
+    view: [1, 0.3, 0],
   },
 ];

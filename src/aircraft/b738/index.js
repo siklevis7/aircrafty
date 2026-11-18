@@ -5,9 +5,17 @@ import { createSystems, controlPanel } from './systems.js';
 import { parts, categories, meta } from './parts.js';
 import { walkaround } from './walkaround.js';
 import { fdParts, fdCategories } from './flightdeck-parts.js';
-import { buildFlightDeck } from './flightdeck.js';
+import { buildFlightDeck, flightDeckCamera } from './flightdeck.js';
 import { schematics, schematicParts, schematicCategories, schematicScenario } from './schematics.js';
 import { failureScenarios, normalFlightConfig, annunciatorLabels } from './failures.js';
+import { extensions } from './ext/index.js';
+import { trainers } from './trainers/index.js';
+import { buildCabin, cabinCamera } from './cabin.js';
+import { cabinParts, cabinCategories } from './cabin-parts.js';
+
+// System extensions add schematics, study content, failures, lights and scenario controls.
+const fromExt = (key) => extensions.flatMap((e) => e[key] || []);
+const mergeExt = (key) => Object.assign({}, ...extensions.map((e) => e[key] || {}));
 
 export default {
   meta,
@@ -15,31 +23,33 @@ export default {
   categories,
   controlPanel,
   walkaround,
-  failures: { scenarios: failureScenarios, normal: normalFlightConfig, labels: annunciatorLabels },
-  schematics: { systems: schematics, parts: schematicParts, categories: schematicCategories, scenario: schematicScenario },
+  trainers,
+  failures: {
+    scenarios: [...failureScenarios, ...fromExt('failures')],
+    normal: { ...normalFlightConfig, ...mergeExt('normal') },
+    labels: { ...annunciatorLabels, ...mergeExt('labels') },
+  },
+  schematics: {
+    systems: [...schematics, ...fromExt('schematics')],
+    parts: [...schematicParts, ...fromExt('parts')],
+    categories: [...schematicCategories, ...fromExt('categories')],
+    scenario: [...schematicScenario, ...fromExt('scenario')],
+  },
   flightDeck: {
     parts: fdParts,
     categories: fdCategories,
     build: (systems) => buildFlightDeck(systems),
-    camera: {
-      home: { position: [0.02, 1.17, -0.5], target: [0.86, 0.86, -0.3] },
-      views: {
-        Captain: { position: [0.02, 1.17, -0.5], target: [0.86, 0.86, -0.3] },
-        'First Officer': { position: [0.02, 1.17, 0.5], target: [0.86, 0.86, 0.3] },
-        Overhead: { position: [-0.45, 1.05, 0], target: [0.25, 1.85, 0] },
-        Pedestal: { position: [-0.6, 1.45, 0], target: [0.2, 0.58, 0] },
-        Glareshield: { position: [0.05, 1.2, 0], target: [0.66, 1.0, 0] },
-        Jumpseat: { position: [-1.1, 1.5, 0.3], target: [0.6, 1.0, 0] },
-      },
-      env: { ground: false, fog: false },
-      limits: { minDistance: 0.12, maxDistance: 2.4, near: 0.03, fov: 62 },
-      bounds: { min: [-1.15, 0.25, -0.98], max: [0.95, 1.95, 0.98] },
-      focus: { scale: 1.6, add: 0.22, min: 0.3, max: 1.4 },
-    },
+    camera: flightDeckCamera,
+  },
+  cabin: {
+    parts: cabinParts,
+    categories: cabinCategories,
+    build: (systems) => buildCabin(systems),
+    camera: cabinCamera,
   },
   build() {
     const { root, rig } = buildModel();
-    const systems = createSystems(rig);
+    const systems = createSystems(rig, extensions);
     return { root, systems };
   },
   camera: {

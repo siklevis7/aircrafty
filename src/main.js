@@ -8,6 +8,7 @@ import { createDock } from './ui/dock.js';
 import { createWalkaround } from './ui/walkaround.js';
 import { createSchematicView } from './ui/schematic.js';
 import { createFailures } from './ui/failures.js';
+import { createTraining } from './ui/training.js';
 import { toast } from './ui/toast.js';
 
 const $ = (s) => document.querySelector(s);
@@ -30,7 +31,7 @@ $('#theme-toggle').addEventListener('click', () => {
 });
 systemDark.addEventListener('change', applySceneTheme);
 
-const MODE_HASH = { explore: '', walkaround: '#walkaround', flightdeck: '#flightdeck', systems: '#systems', failures: '#failures' };
+const MODE_HASH = { explore: '', walkaround: '#walkaround', flightdeck: '#flightdeck', systems: '#systems', failures: '#failures', cabin: '#cabin', training: '#training' };
 const modeFromHash = () => Object.keys(MODE_HASH).find((m) => MODE_HASH[m] && MODE_HASH[m] === location.hash) || 'explore';
 
 // ---------------------------------------------------------------- boot
@@ -70,6 +71,14 @@ async function boot() {
     };
   }
 
+  let cabin = null;
+  if (ac.cabin) {
+    cabin = ac.cabin.build(systems);
+    datasets.cabin = {
+      key: 'cabin', root: cabin.root, parts: ac.cabin.parts, categories: ac.cabin.categories,
+      camera: ac.cabin.camera, progress: createProgress(`${ac.meta.id}-cabin`), family: 'Cabin & emergency',
+    };
+  }
   if (ac.schematics) {
     datasets.systems = {
       key: 'systems', root: null, parts: ac.schematics.parts, categories: ac.schematics.categories,
@@ -177,6 +186,13 @@ async function boot() {
     })
     : null;
   // A dot on the Failures tab while any failure is active (failures persist across modes).
+  const training = ac.trainers?.length
+    ? createTraining($('#train'), $('#training'), {
+      trainers: ac.trainers, aircraftId: ac.meta.id,
+      ctx: { systems, toast, viewer, aircraft: ac },
+    })
+    : null;
+  viewer.addTicker((dt) => { cabin?.update?.(dt); training?.tick(dt); });
   const failTab = document.querySelector('.mode[data-mode="failures"]');
   viewer.addTicker(() => {
     if (!failures) return;
@@ -193,6 +209,8 @@ async function boot() {
   if (!walk) document.querySelector('.mode[data-mode="walkaround"]')?.setAttribute('disabled', '');
   if (!deck) document.querySelector('.mode[data-mode="flightdeck"]')?.setAttribute('disabled', '');
   if (!schem) document.querySelector('.mode[data-mode="systems"]')?.setAttribute('disabled', '');
+  if (!cabin) document.querySelector('.mode[data-mode="cabin"]')?.setAttribute('disabled', '');
+  if (!training) document.querySelector('.mode[data-mode="training"]')?.setAttribute('disabled', '');
   if (!failures) document.querySelector('.mode[data-mode="failures"]')?.setAttribute('disabled', '');
 
   function parkForWalkaround() {
@@ -213,10 +231,13 @@ async function boot() {
     flightdeck: 'Click any panel · drag to look around · scroll to lean in',
     systems: '',
     failures: '',
+    cabin: 'Click any item · drag to look around · scroll to move closer',
+    training: '',
   };
 
   function setMode(next, { initial = false } = {}) {
-    if ((next === 'walkaround' && !walk) || (next === 'flightdeck' && !deck) || (next === 'systems' && !schem) || (next === 'failures' && !failures)) next = 'explore';
+    if ((next === 'walkaround' && !walk) || (next === 'flightdeck' && !deck) || (next === 'systems' && !schem)
+      || (next === 'failures' && !failures) || (next === 'cabin' && !cabin) || (next === 'training' && !training)) next = 'explore';
     if (next === mode && !initial) return;
     const prev = mode;
     mode = next;
@@ -229,6 +250,7 @@ async function boot() {
     select3d(null);
     if (prev === 'walkaround') walk?.stop();
     if (prev === 'failures') failures?.stop();
+    if (prev === 'training') training?.stop();
     const dockEl = $('#dock');
     $('.stage-hint').textContent = HINTS[mode];
 
@@ -242,6 +264,14 @@ async function boot() {
         if (window.innerWidth <= 820) document.body.classList.remove('sidebar-collapsed');
       }
       schem.tick();
+    } else if (mode === 'training') {
+      useDataset('systems');
+      dockEl.classList.add('is-collapsed');
+      training.start();
+      if (window.innerWidth <= 820) document.body.classList.remove('sidebar-collapsed');
+    } else if (mode === 'cabin') {
+      useDataset('cabin');
+      dockEl.classList.add('is-collapsed');
     } else if (mode === 'flightdeck') {
       useDataset('flightdeck');
       dockEl.classList.add('is-collapsed');

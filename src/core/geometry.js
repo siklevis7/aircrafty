@@ -10,36 +10,42 @@ export const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
  * closedV wraps the v direction (tubes, airfoil loops). Caps close the ends
  * with their own vertices so the shading stays crisp at the edge.
  */
-export function gridSurface(fn, nu, nv, { closedV = true, capStart = false, capEnd = false } = {}) {
+export function gridSurface(fn, nu, nv, { closedV = true, capStart = false, capEnd = false, uv = null } = {}) {
   const pos = [];
+  const uvs = [];
   const idx = [];
-  const cols = closedV ? nv : nv + 1;
+  // A closed tube gets one extra seam column (same position, v = 1) so textures wrap cleanly.
+  const cols = nv + 1;
   for (let i = 0; i <= nu; i++) {
     for (let j = 0; j < cols; j++) {
-      const p = fn(i / nu, j / nv);
+      const p = fn(i / nu, closedV && j === nv ? 0 : j / nv);
       pos.push(p[0], p[1], p[2]);
+      const t = uv ? uv(i / nu, j / nv) : [i / nu, j / nv];
+      uvs.push(t[0], t[1]);
     }
   }
   for (let i = 0; i < nu; i++) {
     for (let j = 0; j < nv; j++) {
-      const j1 = closedV ? (j + 1) % cols : j + 1;
+      const j1 = j + 1;
       const a = i * cols + j, b = (i + 1) * cols + j, c = (i + 1) * cols + j1, d = i * cols + j1;
       idx.push(a, b, d, b, c, d);
     }
   }
   const cap = (row, flip) => {
     const start = pos.length / 3;
-    let cx = 0, cy = 0, cz = 0;
+    let cx = 0, cy = 0, cz = 0, cu = 0, cv = 0;
+    const n = closedV ? nv : cols;
     for (let j = 0; j < cols; j++) {
-      const k = (row * cols + j) * 3;
+      const k = (row * cols + j) * 3, q = (row * cols + j) * 2;
       pos.push(pos[k], pos[k + 1], pos[k + 2]);
-      cx += pos[k]; cy += pos[k + 1]; cz += pos[k + 2];
+      uvs.push(uvs[q], uvs[q + 1]);
+      if (j < n) { cx += pos[k]; cy += pos[k + 1]; cz += pos[k + 2]; cu += uvs[q]; cv += uvs[q + 1]; }
     }
     const c = pos.length / 3;
-    pos.push(cx / cols, cy / cols, cz / cols);
+    pos.push(cx / n, cy / n, cz / n);
+    uvs.push(cu / n, cv / n);
     for (let j = 0; j < nv; j++) {
-      const j1 = closedV ? (j + 1) % cols : j + 1;
-      const a = start + j, b = start + j1;
+      const a = start + j, b = start + j + 1;
       if (flip) idx.push(c, b, a); else idx.push(c, a, b);
     }
   };
@@ -47,9 +53,23 @@ export function gridSurface(fn, nu, nv, { closedV = true, capStart = false, capE
   if (capEnd) cap(nu, true);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
+  if (closedV) weldSeamNormals(g, nu, cols);
   return g;
+}
+
+// The seam column duplicates the first one; average their normals so tubes shade smoothly across it.
+function weldSeamNormals(g, nu, cols) {
+  const n = g.attributes.normal;
+  for (let i = 0; i <= nu; i++) {
+    const a = i * cols, b = i * cols + cols - 1;
+    const x = n.getX(a) + n.getX(b), y = n.getY(a) + n.getY(b), z = n.getZ(a) + n.getZ(b);
+    const l = Math.hypot(x, y, z) || 1;
+    n.setXYZ(a, x / l, y / l, z / l);
+    n.setXYZ(b, x / l, y / l, z / l);
+  }
 }
 
 /** Linear interpolation through an array of station objects sorted by `key`. */
@@ -108,16 +128,25 @@ export function makePlanform(stations, camber = 0.02) {
  * `map(s, X, N)` converts planform coordinates to world [x, y, z].
  */
 export function liftingPiece(pf, map, { s0, s1, t0 = 0, t1 = 1, nu = 10, nv = 28, caps = true, ...opts }) {
-  const fn = (u, v) => {
-    const s = lerp(s0, s1, u);
+  const tAt = (v) => {
     const upper = v < 0.5;
     const w = upper ? 1 - v / 0.5 : (v - 0.5) / 0.5; // 0 at t0 (front), 1 at t1 (rear)
     const spacing = t0 === 0 ? 1 - Math.cos((w * Math.PI) / 2) : w;
-    const t = lerp(t0, t1, spacing);
+    return { upper, t: lerp(t0, t1, spacing) };
+  };
+  const fn = (u, v) => {
+    const s = lerp(s0, s1, u);
+    const { upper, t } = tAt(v);
     const p = pf.point(s, t, upper, opts);
     return map(s, p.X, p.N);
   };
-  return gridSurface(fn, nu, nv, { closedV: true, capStart: caps, capEnd: caps });
+  // uv: x = span in metres / 4 (textures tile spanwise); y = chord position:
+  // 0 = upper trailing edge, 0.5 = leading edge, 1 = lower trailing edge (continuous round the nose).
+  const uv = (u, v) => {
+    const { upper, t } = tAt(v);
+    return [lerp(s0, s1, u) / 4, upper ? 0.5 - t * 0.5 : 0.5 + t * 0.5];
+  };
+  return gridSurface(fn, nu, nv, { closedV: true, capStart: caps, capEnd: caps, uv });
 }
 
 /** Hinge line endpoints on the camber line at chord fraction t (world coords). */

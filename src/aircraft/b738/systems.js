@@ -70,7 +70,7 @@ const approach = (cur, target, rate, dt) => {
   return Math.abs(d) <= step ? target : cur + Math.sign(d) * step;
 };
 
-export function createSystems(rig) {
+export function createSystems(rig, extensions = []) {
   const state = {
     onGround: true,
     flapLever: 0,
@@ -90,6 +90,7 @@ export function createSystems(rig) {
     'elec.bus1': 'ext', 'elec.bus2': 'ext', // source selected for each AC transfer bus
     'sw.bleed1': true, 'sw.bleed2': true, 'sw.apubleed': false, 'sw.iso': 'AUTO',
     'sw.pack.l': true, 'sw.pack.r': true, 'sw.wingai': false,
+    'sw.emerlights': 'ARMED', // EMERGENCY EXIT LIGHTS: OFF | ARMED | ON
     // ---- injected failures (Failures mode)
     'fail.eng1': false, 'fail.eng2': false, 'fail.gen1': false, 'fail.gen2': false,
     'fail.hyd.a': false, 'fail.hyd.b': false, 'fail.edp.a': false, 'fail.edp.b': false,
@@ -98,6 +99,8 @@ export function createSystems(rig) {
     'fail.fuel.ctrr': false, 'fail.fuel.fwd2': false, 'fail.fuel.aft2': false,
     'fail.tbus1': false, 'fail.tbus2': false, 'fail.pack.l': false, 'fail.pack.r': false,
   };
+  // system extensions (fire, pressurization, ...) contribute their own state keys
+  for (const ext of extensions) Object.assign(state, ext.state || {});
   // animated values
   const cur = {
     flap: 0, slat: 0, krueger: 0, gear: 0, noseDoor: 1,
@@ -111,6 +114,11 @@ export function createSystems(rig) {
   const gearDownLocked = () => cur.gear <= 0.0001 && state.gearLever !== 'UP';
 
   function set(key, value) {
+    // extensions get first refusal on keys they own (return undefined to pass)
+    for (const ext of extensions) {
+      const r = ext.set?.(key, value, api);
+      if (r) { if (r.ok) emit({ type: 'state' }); return r; }
+    }
     switch (key) {
       case 'onGround': {
         if (value === state.onGround) return { ok: true };
@@ -192,8 +200,10 @@ export function createSystems(rig) {
   // ------------------------------------------------------------------ systems logic
   // Simplified, rule-based models for study. They follow the real architecture
   // (who powers what) without simulating pressures, voltages or quantities.
-  const eng1Run = () => state.engines && !state['fail.eng1'];
-  const eng2Run = () => state.engines && !state['fail.eng2'];
+  // A pulled engine fire switch cuts fuel to that engine, so it stops (fire extension owns the switch state).
+  const fireIn = (n) => (state[`fire.handle.eng${n}`] ?? 'IN') === 'IN';
+  const eng1Run = () => state.engines && !state['fail.eng1'] && fireIn(1);
+  const eng2Run = () => state.engines && !state['fail.eng2'] && fireIn(2);
   function sources() {
     return {
       gen1: eng1Run() && !state['fail.gen1'], gen2: eng2Run() && !state['fail.gen2'],
@@ -221,6 +231,8 @@ export function createSystems(rig) {
       acStby: !!b1 || (bat && state['sw.stbypower']), inverter: !b1 && bat && state['sw.stbypower'],
       batBus: tru3 || bat, hotBat: true, batteryDischarging: bat && !tru3,
       galley1: !!b1, galley2: !!b2,
+      // emergency lights: ON, or ARMED with DC bus 1 power lost (simplified)
+      emerLights: state['sw.emerlights'] === 'ON' || (state['sw.emerlights'] === 'ARMED' && !(tru1 || tru3)),
     };
   }
 
@@ -314,6 +326,7 @@ export function createSystems(rig) {
       'elec.drive1': state['fail.gen1'], 'elec.drive2': state['fail.gen2'],
       'elec.batdisch': e.batteryDischarging && !state.onGround,
       'pack.l': state['fail.pack.l'], 'pack.r': state['fail.pack.r'],
+      'emer.notArmed': state['sw.emerlights'] !== 'ARMED',
     };
     const cats = new Set();
     if (['fuel.aft1', 'fuel.fwd1', 'fuel.fwd2', 'fuel.aft2', 'fuel.ctrl', 'fuel.ctrr'].some((k) => ann[k])) cats.add('FUEL');
@@ -322,7 +335,15 @@ export function createSystems(rig) {
     if (ann['elec.tbo1'] || ann['elec.tbo2'] || ann['elec.drive1'] || ann['elec.drive2']) cats.add('ELEC');
     if (ann['bleed.trip1'] || ann['bleed.trip2'] || ann['pack.l'] || ann['pack.r']) cats.add('AIR COND');
     const eng = { run1: eng1Run(), run2: eng2Run() };
-    return { elec: e, hyd: h, fuel: f, bleed: b, eng, ann, cats };
+    const out = { elec: e, hyd: h, fuel: f, bleed: b, eng, ann, cats };
+    // extensions compute after the core so they can use its results (in registry order)
+    for (const ext of extensions) {
+      if (!ext.compute) continue;
+      out[ext.id] = ext.compute(state, out, api);
+      Object.assign(ann, ext.ann?.(out[ext.id], state, out) || {});
+      for (const c of ext.cats?.(out[ext.id], state, out) || []) cats.add(c);
+    }
+    return out;
   }
 
   /** Jump the animated gear/flaps/height to their commanded positions (scenario setup). */
@@ -353,6 +374,7 @@ export function createSystems(rig) {
 
   function update(dt) {
     t += dt;
+    for (const ext of extensions) ext.update?.(dt, api);
     // flaps (deg/s) and LE devices
     cur.flap = approach(cur.flap, state.flapLever, 7, dt);
     const slatTarget = state.flapLever === 0 ? 0 : state.flapLever <= 5 ? 0.55 : 1;
@@ -362,7 +384,11 @@ export function createSystems(rig) {
     cur.krueger = approach(cur.krueger, leGo ? (state.flapLever > 0 ? 1 : 0) : cur.krueger, 0.6, dt);
 
     // landing gear sequence: 0 = down & locked, 1 = up & locked
-    if (state.gearLever === 'UP') {
+    // gear needs system A (or the transfer unit) to retract; extension needs A or manual (gravity) extension
+    const hy = (state.gearLever === 'OFF') ? null : hydraulics(electrical());
+    const gearPower = !hy || hy.users.gear || hy.lgtu || (state.gearLever === 'DN' && state['gb.manualExt']);
+    if (!gearPower) { /* lever moved but no hydraulic power: gear stays where it is */ }
+    else if (state.gearLever === 'UP') {
       cur.noseDoor = cur.gear < 0.98 ? approach(cur.noseDoor, 1, 2, dt) : cur.noseDoor;
       if (cur.noseDoor >= 0.999 || cur.gear > 0) cur.gear = approach(cur.gear, 1, 0.3, dt);
       if (cur.gear >= 1) cur.noseDoor = approach(cur.noseDoor, 0, 1.4, dt);
@@ -492,6 +518,19 @@ export function createSystems(rig) {
     if (key === 'stabUnits') return cur.stab.toFixed(1);
     return '';
   }
+
+  // read-only view of internals handed to extensions
+  const api = {
+    state, emit, deny,
+    set: (k, v) => set(k, v),
+    panel: () => panel(),
+    get gearPos() { return cur.gear; },
+    get flapPos() { return cur.flap; },
+    get apuReady() { return cur.apuSpool >= 0.999; },
+    get eng1Run() { return eng1Run(); },
+    get eng2Run() { return eng2Run(); },
+    get time() { return t; },
+  };
 
   return {
     state,
