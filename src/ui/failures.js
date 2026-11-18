@@ -18,7 +18,14 @@ export function createFailures(root, { scenarios, normal, labels, systems, showS
     systems.set('speedbrake', 'DOWN');
     ['roll', 'pitch', 'yaw'].forEach((k) => systems.set(k, 0));
     let r = systems.apply(normal);
-    if (r.ok) r = systems.apply(sc.setup);
+    // setup is either one settings object (snapped into place) or a list of steps, where
+    // 'settle' snaps the gear/flaps and later steps play out live (e.g. gear retracting)
+    const steps = Array.isArray(sc.setup) ? sc.setup : [sc.setup, 'settle'];
+    for (const step of steps) {
+      if (!r.ok) break;
+      if (step === 'settle') systems.settle();
+      else r = systems.apply(step);
+    }
     if (!r.ok) { onWarn?.(r.message); return; }
     onInject?.(); // the clean in-flight state is "normal": cautions from here on are new
     sc.flags.forEach((f) => systems.set(f, true));

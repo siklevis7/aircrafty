@@ -33,6 +33,7 @@ export const annunciatorLabels = {
   'elec.batdisch': ['BAT DISCHARGE', 'amber'],
   'bleed.trip1': ['BLEED 1 TRIP OFF', 'amber'], 'bleed.trip2': ['BLEED 2 TRIP OFF', 'amber'],
   'bleed.dual': ['DUAL BLEED', 'amber'],
+  'pack.l': ['L PACK', 'amber'], 'pack.r': ['R PACK', 'amber'],
   'ai.wing': ['WING ANTI-ICE VALVE OPEN', 'blue'], 'fuel.xfeed': ['CROSSFEED VALVE OPEN', 'blue'],
 };
 
@@ -60,6 +61,65 @@ export const failureScenarios = [
       'System A keeps pressure from its electric pump (ELEC 2), powered from the other side.',
       'Starting the APU restores a second generator, and its bleed can feed the left side.',
       'Fly the aircraft first: rudder for the asymmetric thrust, then the non-normal checklist.',
+    ],
+  },
+  {
+    id: 'eng2-fail', title: 'Engine 2 failure in flight', system: 'hydraulics', group: 'Powerplant',
+    setup: { ...IN_FLIGHT, flapLever: 5 }, flags: ['fail.eng2'],
+    summary: 'Engine 2 stops. Generator 2, the system B engine-driven pump and engine 2 bleed are lost. With flaps 5 set, watch the PTU come in.',
+    effects: (c) => [
+      L('Generator 2', c.elec.avail.gen2),
+      L(`AC transfer bus 2 ${c.elec.bus2 === 'gen1' ? '(now powered by GEN 1 via bus transfer)' : ''}`, c.elec.tbus2),
+      L('System B engine-driven pump', c.hyd.pumps.eng2),
+      L('System B pressure (ELEC 1 pump still running)', c.hyd.B),
+      L('Power transfer unit (flaps between UP and 15)', c.hyd.ptu),
+      L('Right pack', c.bleed.packR),
+      I('Set flaps 15 or UP in the scenario bar and the PTU stops.'),
+    ],
+    know: [
+      'The mirror image of an engine 1 failure, but losing engine 2 also takes system B\'s engine pump. That\'s why the PTU exists.',
+      'Generator 1 picks up both transfer buses through bus transfer.',
+      'Starting the APU restores a second generator.',
+    ],
+  },
+  {
+    id: 'eng1-takeoff', title: 'Engine 1 failure after takeoff (gear retraction)', system: 'hydraulics', group: 'Powerplant',
+    setup: [{ ...IN_FLIGHT, gearLever: 'DN', onGround: false, flapLever: 5 }, 'settle', { gearLever: 'UP' }],
+    flags: ['fail.eng1'],
+    summary: 'Engine 1 fails just after liftoff, as the gear is selected UP. System A has lost its engine pump, so the landing gear transfer unit lets system B supply the volume to raise the gear at the normal rate.',
+    effects: (c) => [
+      L('System A engine-driven pump', c.hyd.pumps.eng1),
+      c.hyd.lgtu
+        ? { text: 'Landing gear transfer unit active: system B is raising the gear', state: 'ok' }
+        : { text: 'Gear up and locked (transfer unit no longer needed)', state: 'ok' },
+      L('System A pressure (ELEC 2)', c.hyd.A),
+      L('Generator 1', c.elec.avail.gen1),
+      I('Click the scenario again to replay the gear retraction.'),
+    ],
+    know: [
+      'The transfer unit operates when airborne, with engine 1 N2 low, the gear lever UP and a main gear not up and locked.',
+      'ELEC 2 alone can\'t supply gear retraction volume quickly enough. That\'s why system B steps in.',
+      'Fly the aircraft first: rudder, pitch attitude, then the engine failure procedure at a safe altitude.',
+    ],
+  },
+  {
+    id: 'dual-eng-fail', title: 'Dual engine failure', system: 'electrical', group: 'Powerplant',
+    setup: { ...IN_FLIGHT, flapLever: 0 }, flags: ['fail.eng1', 'fail.eng2'],
+    summary: 'Both engines flame out. Generators, engine-driven pumps and bleeds are all lost. The aircraft is on battery power, and the hydraulic systems lose their pumps.',
+    effects: (c) => [
+      L('Generators 1 and 2', c.elec.avail.gen1 || c.elec.avail.gen2),
+      L('AC transfer buses', c.elec.tbus1 || c.elec.tbus2),
+      L('Standby buses (battery + static inverter)', c.elec.acStby && c.elec.batBus),
+      L('Hydraulic systems A and B', c.hyd.A || c.hyd.B),
+      L('Standby hydraulic pump (needs transfer bus 1)', c.hyd.stby),
+      L('Packs', c.bleed.packL || c.bleed.packR),
+      I('Start the APU in the scenario bar, then put APU GEN on the buses and watch the electric hydraulic pumps return.'),
+    ],
+    know: [
+      'The 737 has no ram air turbine. Electrical power comes from the battery until the APU or an engine is restarted.',
+      'Windmilling engines can still turn their hydraulic pumps and provide some pressure. That\'s not modelled here.',
+      'Ailerons and elevators can be flown in manual reversion. The rudder needs hydraulic power.',
+      'The APU can supply electrical power in flight and bleed air at lower altitudes, helping engine restarts.',
     ],
   },
   {
@@ -137,6 +197,21 @@ export const failureScenarios = [
     ],
   },
   {
+    id: 'edp-a-fail', title: 'System A engine-driven pump failure', system: 'hydraulics', group: 'Hydraulics',
+    setup: { ...IN_FLIGHT, flapLever: 0 }, flags: ['fail.edp.a'],
+    summary: 'The engine 1 driven pump fails. System A keeps full pressure from its electric pump, ELEC 2.',
+    effects: (c) => [
+      L('System A engine-driven pump', c.hyd.pumps.eng1),
+      L('System A pressure (ELEC 2)', c.hyd.A),
+      L('All system A users', c.hyd.users.gear && c.hyd.users.groundSpoilers),
+      I('Now switch ELEC 2 off (click it) to see the whole system go down.'),
+    ],
+    know: [
+      'One pump per system covers normal demand. The ENG 1 LOW PRESSURE light shows the failed pump.',
+      'ELEC 2 is powered from transfer bus 2, so it survives an engine 1 failure.',
+    ],
+  },
+  {
     id: 'gen1-fail', title: 'Generator 1 drive failure', system: 'electrical', group: 'Electrical',
     setup: { ...IN_FLIGHT, flapLever: 0 }, flags: ['fail.gen1'],
     summary: 'IDG 1 loses its drive (for example low oil pressure). Generator 1 drops off line and bus transfer moves transfer bus 1 to generator 2.',
@@ -149,6 +224,42 @@ export const failureScenarios = [
     know: [
       'A DRIVE light means the IDG should be disconnected. An IDG can\'t be reconnected in flight.',
       'One generator can carry the essential load. The APU generator restores redundancy.',
+    ],
+  },
+  {
+    id: 'gen2-fail', title: 'Generator 2 drive failure', system: 'electrical', group: 'Electrical',
+    setup: { ...IN_FLIGHT, flapLever: 0 }, flags: ['fail.gen2'],
+    summary: 'IDG 2 loses its drive. Generator 2 drops off line and transfer bus 2 moves to generator 1.',
+    effects: (c) => [
+      L('Generator 2', c.elec.avail.gen2),
+      L('AC transfer bus 1', c.elec.tbus1),
+      L(`AC transfer bus 2 ${c.elec.bus2 === 'gen1' ? '(from GEN 1)' : c.elec.bus2 === 'apu' ? '(from APU)' : ''}`, c.elec.tbus2),
+      L('System A electric pump (ELEC 2, on transfer bus 2)', c.hyd.pumps.elec2),
+      I('Turn BUS TRANSFER off (click it) to see what automatic transfer was doing for you.'),
+    ],
+    know: [
+      'Same logic as a generator 1 failure: one generator can power both transfer buses.',
+      'With BUS TRANSFER off there\'s no automatic transfer. The bus stays unpowered until another source is selected.',
+    ],
+  },
+  {
+    id: 'tbus1-fail', title: 'AC transfer bus 1 failure', system: 'electrical', group: 'Electrical',
+    setup: { ...IN_FLIGHT, flapLever: 0 }, flags: ['fail.tbus1'],
+    summary: 'A fault leaves transfer bus 1 unpowered and generator 1 can\'t be connected to it. Everything fed from that bus is lost, across several systems.',
+    effects: (c) => [
+      L('AC transfer bus 1', c.elec.tbus1),
+      L('TRU 1 (DC bus 1 now fed through TRU 3)', c.elec.tru1),
+      L('DC bus 1', c.elec.dc1),
+      L('System B electric pump (ELEC 1)', c.hyd.pumps.elec1),
+      L('Standby hydraulic pump (no power to start it)', c.elec.tbus1),
+      L('Fuel pumps: tank 1 and center L', c.fuel.pumps.aft1 || c.fuel.pumps.fwd1 || c.fuel.pumps.ctrl),
+      L('Engine 1 (suction feed if no pump pressure)', c.fuel.eng1Feed),
+      I('Open the crossfeed (Fuel tab) to feed engine 1 from the right-side pumps.'),
+    ],
+    know: [
+      'A single bus failure cascades: hydraulics, fuel and DC loads on that side all lose power.',
+      'The AC standby bus moves to the static inverter, because it\'s normally fed from transfer bus 1.',
+      'Crossfeed lets the opposite side\'s pumps feed the engine.',
     ],
   },
   {
@@ -185,6 +296,66 @@ export const failureScenarios = [
     know: [
       'A trip can often be reset with the TRIP RESET switch once temperatures come down.',
       'One pack can maintain pressurization. The isolation valve lets the other side feed both.',
+    ],
+  },
+  {
+    id: 'bleed2-trip', title: 'Engine 2 bleed trip off', system: 'bleed', group: 'Pneumatics',
+    setup: { ...IN_FLIGHT, flapLever: 0 }, flags: ['fail.bleed2'],
+    summary: 'The engine 2 bleed valve trips closed. The right duct and right pack lose their air.',
+    effects: (c) => [
+      L('Engine 2 bleed', c.bleed.eb2),
+      L('Right duct', c.bleed.right),
+      L('Right pack', c.bleed.packR),
+      L('Left pack', c.bleed.packL),
+      I('Open the ISOLATION valve and the left engine feeds both packs.'),
+    ],
+    know: ['Mirror image of the engine 1 trip.', 'Wing anti-ice needs both ducts or an open isolation valve to heat both wings.'],
+  },
+  {
+    id: 'dual-bleed-trip', title: 'Loss of both engine bleeds', system: 'bleed', group: 'Pneumatics',
+    setup: { ...IN_FLIGHT, flapLever: 0 }, flags: ['fail.bleed1', 'fail.bleed2'],
+    summary: 'Both engine bleed valves trip. Neither pack has air, so the cabin starts to lose pressurization.',
+    effects: (c) => [
+      L('Engine bleeds', c.bleed.eb1 || c.bleed.eb2),
+      L('Left pack', c.bleed.packL),
+      L('Right pack', c.bleed.packR),
+      L('Wing anti-ice supply', c.bleed.left || c.bleed.right),
+      I('Start the APU and open APU BLEED: the left pack comes back (APU bleed can be used at lower altitudes).'),
+    ],
+    know: [
+      'With no pack running, cabin altitude climbs. Expect a descent and possibly the oxygen masks.',
+      'The APU can supply bleed air for one pack at lower altitudes (up to 17,000 ft for bleed alone).',
+      'Bleed trips can often be reset once temperatures fall.',
+    ],
+  },
+  {
+    id: 'pack-l-trip', title: 'Left pack trip', system: 'bleed', group: 'Pneumatics',
+    setup: { ...IN_FLIGHT, flapLever: 0 }, flags: ['fail.pack.l'],
+    summary: 'The left pack shuts down (for example an overheat). Bleed air is still available, but only the right pack conditions the cabin.',
+    effects: (c) => [
+      L('Left pack', c.bleed.packL),
+      L('Right pack', c.bleed.packR),
+      L('Left duct (bleed still available)', c.bleed.left),
+      L('Cabin air supply (one pack)', c.bleed.packL || c.bleed.packR),
+    ],
+    know: [
+      'One pack can maintain pressurization and temperature.',
+      'A pack trip can often be reset after it cools. The PACK light shows the trip.',
+    ],
+  },
+  {
+    id: 'fuel-tank1-pumps', title: 'Both tank 1 fuel pumps failed', system: 'fuel', group: 'Fuel',
+    setup: { ...IN_FLIGHT, flapLever: 0 }, flags: ['fail.fuel.aft1', 'fail.fuel.fwd1'],
+    summary: 'Both boost pumps in main tank 1 fail. Engine 1 keeps running on suction feed from its own tank.',
+    effects: (c) => [
+      L('Tank 1 pumps', c.fuel.pumps.aft1 || c.fuel.pumps.fwd1),
+      L('Engine 1 manifold pressure', c.fuel.leftPress),
+      L(c.fuel.eng1Suction ? 'Engine 1 running on suction feed' : 'Engine 1 pressure-fed', !c.fuel.eng1Suction),
+      I('Open the crossfeed (click the valve) and the right-side pumps pressurize engine 1\'s feed.'),
+    ],
+    know: [
+      'Suction feed works but is limited at high altitude, where a lower altitude may be needed.',
+      'Feeding from one side with crossfeed open causes an imbalance. Monitor it.',
     ],
   },
   {

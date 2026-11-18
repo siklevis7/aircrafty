@@ -505,7 +505,8 @@ export class Viewer {
   }
 
   _frame() {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    // Cap the step so a stalled tab doesn't jump, but keep slow devices close to real time.
+    const dt = Math.min(this.clock.getDelta(), 0.25);
     const now = this.clock.elapsedTime;
     for (const t of this.tickers) t(dt, now);
     if (this.paused) return;

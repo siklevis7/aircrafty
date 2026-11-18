@@ -93,7 +93,10 @@ export function createSystems(rig) {
     // ---- injected failures (Failures mode)
     'fail.eng1': false, 'fail.eng2': false, 'fail.gen1': false, 'fail.gen2': false,
     'fail.hyd.a': false, 'fail.hyd.b': false, 'fail.edp.a': false, 'fail.edp.b': false,
-    'fail.bleed1': false, 'fail.bleed2': false, 'fail.fuel.fwd1': false,
+    'fail.bleed1': false, 'fail.bleed2': false,
+    'fail.fuel.aft1': false, 'fail.fuel.fwd1': false, 'fail.fuel.ctrl': false,
+    'fail.fuel.ctrr': false, 'fail.fuel.fwd2': false, 'fail.fuel.aft2': false,
+    'fail.tbus1': false, 'fail.tbus2': false, 'fail.pack.l': false, 'fail.pack.r': false,
   };
   // animated values
   const cur = {
@@ -201,13 +204,14 @@ export function createSystems(rig) {
   function electrical() {
     const avail = sources();
     const ok = (src) => !!src && !!avail[src];
-    let b1 = ok(state['elec.bus1']) ? state['elec.bus1'] : '';
-    let b2 = ok(state['elec.bus2']) ? state['elec.bus2'] : '';
+    const f1 = state['fail.tbus1'], f2 = state['fail.tbus2']; // bus fault: can't be powered at all
+    let b1 = !f1 && ok(state['elec.bus1']) ? state['elec.bus1'] : '';
+    let b2 = !f2 && ok(state['elec.bus2']) ? state['elec.bus2'] : '';
     // Automatic bus transfer: if one generator side is lost, the other generator powers both buses.
     const isGen = (s) => s === 'gen1' || s === 'gen2';
     if (state['sw.bustransfer']) {
-      if (!b1 && isGen(b2)) b1 = b2;
-      if (!b2 && isGen(b1)) b2 = b1;
+      if (!b1 && !f1 && isGen(b2)) b1 = b2;
+      if (!b2 && !f2 && isGen(b1)) b2 = b1;
     }
     const bat = state['sw.battery'];
     const tru1 = !!b1, tru2 = !!b2, tru3 = !!b2 || !!b1;
@@ -283,7 +287,8 @@ export function createSystems(rig) {
     const right = rightSrc || (isoOpen && leftSrc);
     return {
       eb1, eb2, apub, isoOpen, left, right,
-      packL: state['sw.pack.l'] && left, packR: state['sw.pack.r'] && right,
+      packL: state['sw.pack.l'] && left && !state['fail.pack.l'],
+      packR: state['sw.pack.r'] && right && !state['fail.pack.r'],
       wingAI: state['sw.wingai'] && (left || right),
       // DUAL BLEED follows switch positions: APU bleed valve open with engine 1 bleed ON, or engine 2 bleed ON and isolation open
       dualBleed: apub && (state['sw.bleed1'] || (state['sw.bleed2'] && isoOpen)),
@@ -308,15 +313,26 @@ export function createSystems(rig) {
       'bleed.trip1': state['fail.bleed1'], 'bleed.trip2': state['fail.bleed2'],
       'elec.drive1': state['fail.gen1'], 'elec.drive2': state['fail.gen2'],
       'elec.batdisch': e.batteryDischarging && !state.onGround,
+      'pack.l': state['fail.pack.l'], 'pack.r': state['fail.pack.r'],
     };
     const cats = new Set();
     if (['fuel.aft1', 'fuel.fwd1', 'fuel.fwd2', 'fuel.aft2', 'fuel.ctrl', 'fuel.ctrr'].some((k) => ann[k])) cats.add('FUEL');
     if (['hyd.elec2', 'hyd.elec1', 'hyd.eng1', 'hyd.eng2'].some((k) => ann[k])) cats.add('HYD');
     if (ann['fc.a'] || ann['fc.b']) cats.add('FLT CONT');
     if (ann['elec.tbo1'] || ann['elec.tbo2'] || ann['elec.drive1'] || ann['elec.drive2']) cats.add('ELEC');
-    if (ann['bleed.trip1'] || ann['bleed.trip2']) cats.add('AIR COND');
+    if (ann['bleed.trip1'] || ann['bleed.trip2'] || ann['pack.l'] || ann['pack.r']) cats.add('AIR COND');
     const eng = { run1: eng1Run(), run2: eng2Run() };
     return { elec: e, hyd: h, fuel: f, bleed: b, eng, ann, cats };
+  }
+
+  /** Jump the animated gear/flaps/height to their commanded positions (scenario setup). */
+  function settle() {
+    cur.gear = state.gearLever === 'UP' ? 1 : state.gearLever === 'DN' ? 0 : cur.gear;
+    cur.noseDoor = cur.gear >= 1 ? 0 : 1;
+    cur.flap = state.flapLever;
+    cur.slat = state.flapLever === 0 ? 0 : state.flapLever <= 5 ? 0.55 : 1;
+    cur.krueger = state.flapLever > 0 ? 1 : 0;
+    cur.lift = state.onGround ? 0 : 1;
   }
 
   /** Apply several settings in order (used by "Try it" buttons). */
@@ -486,6 +502,7 @@ export function createSystems(rig) {
     annunciators,
     readout,
     panel,
+    settle,
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
   };
 }
