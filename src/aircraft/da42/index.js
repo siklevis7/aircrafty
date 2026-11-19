@@ -11,7 +11,12 @@ import { buildModel } from './model.js';
 import { createSystems, controlPanel } from './systems.js';
 import { parts, categories, meta } from './parts.js';
 import { walkaround } from './walkaround.js';
+import { fdParts, fdCategories } from './flightdeck-parts.js';
+import { buildFlightDeck, flightDeckCamera } from './flightdeck.js';
+import { createCockpitExtension } from './flightdeck-systems.js';
 
+// Part 2: cockpit switches (masters, ENGINE MASTER/START, power levers, fuel selectors...) and the
+// representative EIS / CAS data for the G1000 come from this extension.
 const extensions = [];
 
 export default {
@@ -20,9 +25,16 @@ export default {
   categories,
   controlPanel,
   walkaround,
+  flightDeck: {
+    parts: fdParts,
+    categories: fdCategories,
+    build: (systems) => buildFlightDeck(systems),
+    camera: flightDeckCamera,
+  },
   build() {
     const { root, rig } = buildModel();
-    const systems = createSystems(rig, extensions);
+    // a fresh cockpit extension per build (its smoothed engine readings are per controller)
+    const systems = createSystems(rig, [...extensions, createCockpitExtension()]);
     return { root, systems };
   },
   camera: {
